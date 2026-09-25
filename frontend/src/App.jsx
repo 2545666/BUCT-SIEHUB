@@ -1516,6 +1516,7 @@ const DEPARTMENT_SHOWCASE_URLS = {
   culture_sports_arts: '/culture-sports-arts/index.html'
 };
 const CULTURE_SPORTS_ARTS_INTRO_URL = DEPARTMENT_SHOWCASE_URLS.culture_sports_arts;
+const CULTURE_SPORTS_ARTS_PERFORMANCE_URL = '/culture-sports-arts/performance/index.html';
 
 const SIEHUB_HISTORY_MARKER = 'siehub-navigation-v1';
 const SIEHUB_APP_SURFACES = new Set(['hub', 'departments', 'ultimateOrganization', 'department', 'sievox', 'siebridge', 'my']);
@@ -4008,6 +4009,25 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
   );
 };
 
+const CultureSportsArtsPerformanceWorkspace = () => (
+  <section className="siehub-special-performance-card">
+    <div className="siehub-special-performance-head">
+      <div>
+        <p>CULTURE, SPORTS &amp; ARTS / PERFORMANCE</p>
+        <h2>文体艺术部考核绩效平台</h2>
+        <span>已替换原通用绩效模块，平台数据与操作在独立子路径中运行。</span>
+      </div>
+      <button type="button" onClick={() => window.open(CULTURE_SPORTS_ARTS_PERFORMANCE_URL, '_blank', 'noopener,noreferrer')}>新窗口打开</button>
+    </div>
+    <iframe
+      className="siehub-special-performance-frame"
+      src={CULTURE_SPORTS_ARTS_PERFORMANCE_URL}
+      title="文体艺术部考核绩效平台"
+      loading="lazy"
+    />
+  </section>
+);
+
 const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVOX, onOpenSIEBridge, onOpenMy, onLogout, languageSwitcher = null, language = 'zh' }) => {
   const [performancePolicy, setPerformancePolicy] = useState(null);
   const [policyAccess, setPolicyAccess] = useState(null);
@@ -4040,6 +4060,13 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
     if (!module?.organization || !module?.key || !token) {
       setPerformancePolicy(null);
       setPolicyAccess(null);
+      return undefined;
+    }
+
+    if (module.key === 'culture_sports_arts') {
+      setPerformancePolicy(null);
+      setPolicyAccess(null);
+      setPolicyLoading(false);
       return undefined;
     }
 
@@ -4163,19 +4190,21 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
       ) : manageWorkspace === 'files' ? (
         <DepartmentFileWorkspace module={module} token={token} canView={canViewFiles} canManage={canManageFiles} />
       ) : manageWorkspace === 'performance' ? (
-        <>
-          <DepartmentPerformancePolicyCard
-            module={module}
-            policy={performancePolicy}
-            canEdit={canManagePerformance}
-            loading={policyLoading}
-            saving={policySaving}
-            message={policyMessage}
-            onSave={savePerformancePolicy}
-            onReset={resetPerformancePolicy}
-          />
-          <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformance} />
-        </>
+        isCultureSportsArts ? <CultureSportsArtsPerformanceWorkspace /> : (
+          <>
+            <DepartmentPerformancePolicyCard
+              module={module}
+              policy={performancePolicy}
+              canEdit={canManagePerformance}
+              loading={policyLoading}
+              saving={policySaving}
+              message={policyMessage}
+              onSave={savePerformancePolicy}
+              onReset={resetPerformancePolicy}
+            />
+            <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformance} />
+          </>
+        )
       ) : (
         <>
           <div className="siehub-framework-grid">
