@@ -264,19 +264,19 @@ const getHubModuleAccess = (user = {}) => {
     return Array.from(accessByModuleId.values());
   }
 
-  if (['department_head', 'youth_league_cadre'].includes(user.positionTitle)) {
+  if (user.role === 'superadmin' && user.memberRole === 'department_lead' && ['department_head', 'youth_league_cadre'].includes(user.positionTitle)) {
     grant(user.organization, user.department, 'manage', buildManageCapabilities(user.organization, user.department));
     return Array.from(accessByModuleId.values());
   }
 
-  if (user.positionTitle === 'presidium_member' || user.positionTitle === 'youth_league_deputy_secretary') {
+  if (user.role === 'superadmin' && user.memberRole === 'presidium' && (user.positionTitle === 'presidium_member' || user.positionTitle === 'youth_league_deputy_secretary')) {
     normalizeManagedDepartments(user.managedDepartments).forEach(({ organization, department }) => {
       grant(organization, department, 'manage', buildManageCapabilities(organization, department, { includeSiebridgeReview: true }));
     });
     return Array.from(accessByModuleId.values());
   }
 
-  if (user.memberRole === 'volunteer' || user.role === 'admin') {
+  if (user.role === 'admin' && user.memberRole === 'volunteer' && user.positionTitle === 'volunteer') {
     grant(user.organization, user.department, 'member', ['view', 'enter_student_portal', 'participate', 'view_department_files']);
     return Array.from(accessByModuleId.values());
   }
@@ -299,6 +299,23 @@ const normalizeManagedDepartments = (assignments = []) => {
       seen.add(key);
       return true;
     });
+};
+
+const canWithdrawSievoxFeedback = (user = {}, feedback = {}) => {
+  const actorId = String(user._id || user.id || '');
+  const submitterId = String(feedback.user?._id || feedback.user?.id || feedback.user || '');
+  if (actorId && actorId === submitterId) return feedback.status === 'pending';
+  const isStudentRightsLeader = user.role === 'superadmin' &&
+    user.memberRole === 'department_lead' &&
+    user.positionTitle === 'department_head' &&
+    isSievoxDepartment(user.organization, user.department);
+  const isAssignedPresidium = user.role === 'superadmin' &&
+    user.memberRole === 'presidium' &&
+    user.positionTitle === 'presidium_member' &&
+    normalizeManagedDepartments(user.managedDepartments).some(item =>
+      isSievoxDepartment(item.organization, item.department)
+    );
+  return isStudentRightsLeader || isAssignedPresidium;
 };
 
 const getVolunteerPerformancePolicy = (organization, department) => {
@@ -394,15 +411,7 @@ function getIdentityLabel(user = {}) {
 
 function getAssignableScope(user = {}) {
   if (user.isUltimateAdmin) return null;
-
-  const managedDepartments = normalizeManagedDepartments(user.managedDepartments || []);
-  if (managedDepartments.length > 0) return managedDepartments;
-
-  if (user.role === 'superadmin' && isValidManagedDepartment(user)) {
-    return [{ organization: user.organization, department: user.department }];
-  }
-
-  return [];
+  return getHubModuleAccess(user).filter(module => module.accessLevel === 'manage').map(({ organization, department }) => ({ organization, department }));
 }
 
 module.exports = {
@@ -415,6 +424,7 @@ module.exports = {
   SIEBRIDGE_DEPARTMENT,
   SIEVOX_DEPARTMENT,
   SIEVOX_VOLUNTEER_PERFORMANCE_POLICY,
+  canWithdrawSievoxFeedback,
   getDepartment,
   getDepartmentLabel,
   getHubModuleAccess,

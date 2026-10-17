@@ -11,10 +11,10 @@ test('remembered login tokens last 180d', () => {
   assert.equal(app.getLoginTokenExpiresIn(true), '180d');
 });
 
-test('mobile user agents persist login for 180d even without remember flag', () => {
+test('mobile sessions require the same explicit remember choice as desktop sessions', () => {
   assert.equal(app.isMobileUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), true);
   assert.equal(app.isMobileUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), false);
-  assert.equal(app.shouldPersistLogin(false, 'Mozilla/5.0 (Android 14; Mobile)'), true);
+  assert.equal(app.shouldPersistLogin(false, 'Mozilla/5.0 (Android 14; Mobile)'), false);
   assert.equal(app.shouldPersistLogin(true, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), true);
   assert.equal(app.shouldPersistLogin(false, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), false);
 });

@@ -1,4 +1,40 @@
 /* React runtime additions layered after ui-demo/styles.css. */
+.sievox-admin-mobile-nav {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .admin-demo-shell .sievox-account-settings {
+    display: none;
+  }
+
+  .sievox-admin-mobile-nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+    scrollbar-width: none;
+  }
+
+  .sievox-admin-mobile-nav button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--canvas);
+    color: var(--ink);
+    font-size: 12px;
+  }
+
+  .sievox-admin-mobile-nav button.is-active {
+    border-color: var(--theme-primary);
+    color: var(--theme-primary);
+  }
+}
+
 :root {
   --font-sans: "Source Serif 4", "Noto Serif SC", "Iowan Old Style", "Georgia", "Songti SC", "STSong", "SimSun", serif;
   --font-latin: "Source Serif 4", "Iowan Old Style", "Georgia", "Times New Roman", serif;
@@ -2228,7 +2264,7 @@ html[data-theme="dark"] .topbar-user-chip {
 
   .admin-demo-shell .superadmin-metrics,
   .admin-demo-shell .admin-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-demo-shell .admin-module-tabs button {
@@ -2236,7 +2272,7 @@ html[data-theme="dark"] .topbar-user-chip {
   }
 
   .admin-demo-shell .queue-tabs {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-demo-shell .case-tr {

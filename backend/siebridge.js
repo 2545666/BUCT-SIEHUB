@@ -3,6 +3,7 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
+const { isConsistentIdentity } = require('./security-policy');
 
 const SIEBRIDGE_ASSIGNMENT = Object.freeze({
   organization: 'student_union',
@@ -26,6 +27,8 @@ const SIEBRIDGE_SECTIONS = Object.freeze([
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 const MAX_FILE_COUNT = 100;
+const MAX_REQUEST_SIZE = 600 * 1024 * 1024;
+const MAX_USER_STORAGE = 2 * 1024 * 1024 * 1024;
 const SIEBRIDGE_RECEIPT_ISSUER = '北京化工大学国际教育学院学术科技部';
 
 const cleanText = (value, max = 160) => String(value || '').trim().replace(/<[^>]*>/g, '').slice(0, max);
@@ -112,6 +115,7 @@ const formatSiebridgeUploadError = (error) => {
     return { status: 400, message: error.message || '上传文件失败' };
   }
   if (error.message === '文件名无效') return { status: 400, message: '存在文件名无效的文件，请检查后重新上传' };
+  if (error.code === 'SIEBRIDGE_TOTAL_SIZE') return { status: 413, message: '上传文件总量超过单次 600MB 或账号剩余容量' };
   return null;
 };
 
@@ -309,6 +313,7 @@ const serializeUploadReceipt = (receipt) => {
 
 const canReviewSieBridge = (user = {}) => {
   if (user.isUltimateAdmin) return true;
+  if (!isConsistentIdentity(user) || user.memberRole !== 'presidium') return false;
   if (!['presidium_member', 'youth_league_deputy_secretary'].includes(user.positionTitle)) return false;
   return Array.isArray(user.managedDepartments) && user.managedDepartments.some(item =>
     item?.organization === SIEBRIDGE_ASSIGNMENT.organization &&
@@ -363,9 +368,40 @@ const resolveStoredResourcePath = (uploadDir, storedName = '') => {
 
 const getResourceFileByIndex = (resource, value) => {
   const files = resource?.files || [];
-  const index = Number.isInteger(Number(value)) ? Number(value) : 0;
-  if (index < 0 || index >= files.length) return null;
+  const index = value === undefined ? 0 : (/^\d+$/.test(String(value)) ? Number(value) : -1);
+  if (!Number.isSafeInteger(index) || index < 0 || index >= files.length) return null;
   return files[index];
+};
+
+const canResubmitCourse = (user, course) => course?.status === 'rejected' &&
+  String(course.submittedBy?._id || course.submittedBy) === String(user?._id);
+
+const canDeleteResource = (user, resource) => canReviewSieBridge(user) ||
+  (['pending', 'rejected'].includes(resource?.status) &&
+    String(resource.submittedBy?._id || resource.submittedBy) === String(user?._id));
+
+const withRecoverableFileDeletion = async (filePaths, persist) => {
+  const moved = [];
+  try {
+    for (const originalPath of filePaths) {
+      const recycleDir = path.join(path.dirname(originalPath), '.trash');
+      await fs.promises.mkdir(recycleDir, { recursive: true });
+      const recyclePath = path.join(recycleDir, `${crypto.randomBytes(12).toString('hex')}-${path.basename(originalPath)}`);
+      try {
+        await fs.promises.rename(originalPath, recyclePath);
+        moved.push({ originalPath, recyclePath });
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    await persist();
+  } catch (error) {
+    // A failed database write must leave all existing files recoverable.
+    for (const item of moved.reverse()) await fs.promises.rename(item.recyclePath, item.originalPath);
+    throw error;
+  }
+  // A cleanup failure leaves a recoverable file in .trash, never a broken live record.
+  await Promise.all(moved.map(item => fs.promises.unlink(item.recyclePath).catch(() => {})));
 };
 
 const createFileChecksum = (filePath) => new Promise((resolve, reject) => {
@@ -456,9 +492,59 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
     }
   });
 
+  const handleFile = storage._handleFile.bind(storage);
+  storage._handleFile = (req, file, callback) => {
+    file.stream.on('data', chunk => {
+      req.siebridgeUploadBytes = (req.siebridgeUploadBytes || 0) + chunk.length;
+      if (req.siebridgeUploadBytes > req.siebridgeUploadLimit && !file.stream.destroyed) {
+        const error = new Error('上传总量超过限制');
+        error.code = 'SIEBRIDGE_TOTAL_SIZE';
+        file.stream.destroy(error);
+      }
+    });
+    handleFile(req, file, callback);
+  };
+
+  const uploadingUsers = new Set();
+  const checkUploadCapacity = async (req, res, next) => {
+    const userId = String(req.user._id);
+    if (uploadingUsers.has(userId) || uploadingUsers.size >= 2) {
+      return res.status(429).json({ success: false, message: '当前有上传正在进行，请稍后重试' });
+    }
+    if (Number(req.headers['content-length'] || 0) > MAX_REQUEST_SIZE) {
+      return res.status(413).json({ success: false, message: '单次上传总量不能超过 600MB' });
+    }
+    uploadingUsers.add(userId);
+    const release = () => uploadingUsers.delete(userId);
+    req.siebridgeReleaseUpload = release;
+    res.once('finish', release);
+    try {
+      const usage = await SiebridgeResource.aggregate([
+        { $match: { submittedBy: req.user._id } },
+        { $group: { _id: null, bytes: { $sum: { $sum: '$files.size' } } } }
+      ]);
+      const remaining = MAX_USER_STORAGE - (usage[0]?.bytes || 0);
+      const disk = await fs.promises.statfs(privateUploadDir);
+      if (Number(disk.bavail) * Number(disk.bsize) < 1024 * 1024 * 1024 + MAX_REQUEST_SIZE * uploadingUsers.size) {
+        release();
+        return res.status(507).json({ success: false, message: '服务器存储空间不足，请稍后重试' });
+      }
+      if (remaining <= 0) {
+        release();
+        return res.status(413).json({ success: false, message: '账号资料总量已达到 2GB，请先清理待审或驳回资料' });
+      }
+      if (req.aborted || res.destroyed) { release(); return; }
+      req.siebridgeUploadLimit = Math.min(MAX_REQUEST_SIZE, remaining);
+      return next();
+    } catch (error) {
+      release();
+      return res.status(503).json({ success: false, message: '暂时无法检查上传容量，请稍后重试' });
+    }
+  };
+
   const siebridgeUpload = multer({
     storage,
-    limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILE_COUNT },
+    limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILE_COUNT, fields: 30, parts: MAX_FILE_COUNT + 30, fieldSize: 256 * 1024 },
     fileFilter: (req, file, cb) => {
       const allowed = isAllowedSiebridgeUploadFile(file);
       cb(allowed ? null : new Error('文件名无效'), allowed);
@@ -467,6 +553,7 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
   const handleSiebridgeUpload = (req, res, next) => {
     siebridgeUpload.array('files', MAX_FILE_COUNT)(req, res, (error) => {
       const uploadError = formatSiebridgeUploadError(error);
+      if (error) req.siebridgeReleaseUpload?.();
       if (uploadError) {
         cleanupFiles(req.files || []);
         return res.status(uploadError.status).json({ success: false, message: uploadError.message });
@@ -484,6 +571,8 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
       sections: SIEBRIDGE_SECTIONS,
       maxFileSize: MAX_FILE_SIZE,
       maxFileCount: MAX_FILE_COUNT,
+      maxRequestSize: MAX_REQUEST_SIZE,
+      maxUserStorage: MAX_USER_STORAGE,
       canReview: canReviewSieBridge(req.user)
     });
   });
@@ -523,8 +612,10 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
     }
   });
 
-  app.post('/api/siebridge/courses', authenticate, handleSiebridgeUpload, async (req, res) => {
+  app.post('/api/siebridge/courses', authenticate, checkUploadCapacity, handleSiebridgeUpload, async (req, res) => {
     const files = req.files || [];
+    let createdCourse = null;
+    let createdResource = null;
     try {
       const courseData = buildCoursePayload(req.body);
       if (!courseData.valid) {
@@ -537,27 +628,50 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
         return res.status(400).json({ success: false, message: resourceData.message || '请上传至少一份课程资料' });
       }
       const existing = await SiebridgeCourse.findOne({ normalizedCode: courseData.payload.normalizedCode });
-      if (existing) {
+      if (existing && !canResubmitCourse(req.user, existing)) {
         cleanupFiles(files);
         return res.status(409).json({ success: false, message: '该课程代码已存在，请在已有课程内上传资料' });
       }
-      const course = await SiebridgeCourse.create({ ...courseData.payload, submittedBy: req.user._id });
+      const storedFiles = await toStoredFiles(files, parseFilePaths(req.body.filePaths));
+      let course = existing;
+      if (!course) {
+        course = await SiebridgeCourse.create({ ...courseData.payload, submittedBy: req.user._id });
+        createdCourse = course;
+      }
       const resource = await SiebridgeResource.create({
         course: course._id,
         ...resourceData.payload,
-        files: await toStoredFiles(files, parseFilePaths(req.body.filePaths)),
+        files: storedFiles,
         submittedBy: req.user._id
       });
-      await logAction(req.user._id, 'submit_siebridge_course', 'siebridgeCourse', course._id, { code: course.code, resource: resource._id }, req);
+      createdResource = resource;
+      if (existing) {
+        course = await SiebridgeCourse.findOneAndUpdate(
+          { _id: existing._id, status: 'rejected', updatedAt: existing.updatedAt, submittedBy: req.user._id },
+          { $set: { ...courseData.payload, status: 'pending', reviewComment: '' }, $unset: { reviewedBy: '', reviewedAt: '' } },
+          { new: true, runValidators: true }
+        );
+        if (!course) throw new Error('COURSE_CHANGED');
+      }
+      await logAction(req.user._id, 'submit_siebridge_course', 'siebridgeCourse', course._id, { code: course.code, resource: resource._id }, req).catch(() => {});
       res.status(201).json({ success: true, message: '课程与资料已提交审核', course: serializeCourse(course), resource: serializeResource(resource) });
     } catch (error) {
+      // Do not remove stored files unless the matching new database records are gone.
+      try {
+        if (createdResource) await createdResource.deleteOne();
+        if (createdCourse) await createdCourse.deleteOne();
+      } catch (rollbackError) {
+        return res.status(500).json({ success: false, message: '提交未完成，资料已保留，请联系管理员核对' });
+      }
       cleanupFiles(files);
       const duplicate = error?.code === 11000;
       res.status(duplicate ? 409 : 500).json({ success: false, message: duplicate ? '该课程代码已存在' : '提交课程失败' });
+    } finally {
+      req.siebridgeReleaseUpload?.();
     }
   });
 
-  app.post('/api/siebridge/courses/:courseId/resources', authenticate, handleSiebridgeUpload, async (req, res) => {
+  app.post('/api/siebridge/courses/:courseId/resources', authenticate, checkUploadCapacity, handleSiebridgeUpload, async (req, res) => {
     const files = req.files || [];
     try {
       const course = await SiebridgeCourse.findById(req.params.courseId);
@@ -576,11 +690,13 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
         files: await toStoredFiles(files, parseFilePaths(req.body.filePaths)),
         submittedBy: req.user._id
       });
-      await logAction(req.user._id, 'submit_siebridge_resource', 'siebridgeResource', resource._id, { course: course._id }, req);
+      await logAction(req.user._id, 'submit_siebridge_resource', 'siebridgeResource', resource._id, { course: course._id }, req).catch(() => {});
       res.status(201).json({ success: true, message: '资料已提交审核', resource: serializeResource(resource) });
     } catch (error) {
       cleanupFiles(files);
       res.status(500).json({ success: false, message: '提交资料失败' });
+    } finally {
+      req.siebridgeReleaseUpload?.();
     }
   });
 
@@ -700,11 +816,10 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
   });
 
   app.delete('/api/siebridge/resources/:id', authenticate, async (req, res) => {
-    if (!canReviewSieBridge(req.user)) return res.status(403).json({ success: false, message: '无权删除 SIEBridge 资料' });
     try {
       const resource = await populateResource(SiebridgeResource.findById(req.params.id));
       if (!resource) return res.status(404).json({ success: false, message: '资料不存在' });
-      if (resource.status !== 'approved') return res.status(400).json({ success: false, message: '仅可删除已通过审核的资料' });
+      if (!canDeleteResource(req.user, resource)) return res.status(403).json({ success: false, message: '无权删除该资料' });
       if (!isValidDeleteConfirmation(resource, req.body?.confirmation)) {
         return res.status(400).json({ success: false, message: '删除确认信息不匹配，请输入资料标题或“确认删除”' });
       }
@@ -716,19 +831,21 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
         filePaths.push(absolutePath);
       }
 
-      for (const absolutePath of filePaths) {
-        try {
-          await fs.promises.unlink(absolutePath);
-        } catch (error) {
-          if (error.code !== 'ENOENT') throw error;
-        }
+      await withRecoverableFileDeletion(filePaths, async () => {
+        const result = await SiebridgeResource.deleteOne({ _id: resource._id, status: resource.status, updatedAt: resource.updatedAt });
+        if (result.deletedCount !== 1) throw new Error('RESOURCE_CHANGED');
+      });
+
+      const courseId = resource.course?._id || resource.course;
+      if (resource.course?.status !== 'approved' && !await SiebridgeResource.exists({ course: courseId })) {
+        await SiebridgeCourse.updateOne({ _id: courseId, status: 'pending' },
+          { $set: { status: 'rejected', reviewComment: '资料已撤回，可以修正后重新提交' } }).catch(() => {});
       }
 
       await logAction(req.user._id, 'delete_siebridge_approved_resource', 'siebridgeResource', resource._id, {
         title: resource.title,
         course: resource.course?._id || resource.course
-      }, req);
-      await resource.deleteOne();
+      }, req).catch(() => {});
       return res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, message: '删除资料失败' });
@@ -740,33 +857,26 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
     try {
       const resource = await populateResource(SiebridgeResource.findById(req.params.id));
       if (!resource) return res.status(404).json({ success: false, message: '资料不存在' });
-      if (resource.status !== 'approved') return res.status(400).json({ success: false, message: '仅可删除已通过审核的资料文件' });
       if ((resource.files || []).length <= 1) {
         return res.status(400).json({ success: false, message: '该资料仅剩一个文件，请使用整条资料删除' });
       }
 
-      const fileIndex = Number(req.params.fileIndex);
-      const file = getResourceFileByIndex(resource, fileIndex);
+      const file = getResourceFileByIndex(resource, req.params.fileIndex);
       if (!file) return res.status(404).json({ success: false, message: '文件不存在' });
+      const fileIndex = Number(req.params.fileIndex);
       if (!isValidFileDeleteConfirmation(file, req.body?.confirmation)) {
         return res.status(400).json({ success: false, message: '删除确认信息不匹配，请输入文件名或“确认删除”' });
       }
 
       const absolutePath = resolveStoredResourcePath(privateUploadDir, file.storedName);
       if (!absolutePath) return res.status(409).json({ success: false, message: '资料文件路径异常，已阻止删除' });
-      try {
-        await fs.promises.unlink(absolutePath);
-      } catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-      }
-
       resource.files.splice(fileIndex, 1);
-      await resource.save();
+      await withRecoverableFileDeletion([absolutePath], () => resource.save());
       await logAction(req.user._id, 'delete_siebridge_resource_file', 'siebridgeResource', resource._id, {
         title: resource.title,
         file: decodeOriginalName(file.originalName),
         course: resource.course?._id || resource.course
-      }, req);
+      }, req).catch(() => {});
       return res.json({ success: true, resource: serializeResource(resource) });
     } catch (error) {
       res.status(500).json({ success: false, message: '删除资料文件失败' });
@@ -778,15 +888,16 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
     try {
       const resource = await populateResource(SiebridgeResource.findById(req.params.id));
       if (!resource) return res.status(404).json({ success: false, message: '资料不存在' });
-      if (resource.status !== 'approved') return res.status(400).json({ success: false, message: '仅可删除已通过审核的资料文件' });
       if (cleanText(req.body?.confirmation, 160) !== DELETE_CONFIRMATION_PHRASE) {
         return res.status(400).json({ success: false, message: '批量删除请准确输入“确认删除”' });
       }
 
       const files = resource.files || [];
-      const fileIndexes = [...new Set((Array.isArray(req.body?.fileIndexes) ? req.body.fileIndexes : [])
-        .map(Number)
-        .filter(index => Number.isInteger(index) && index >= 0 && index < files.length))]
+      const requestedIndexes = Array.isArray(req.body?.fileIndexes) ? req.body.fileIndexes : [];
+      if (requestedIndexes.some(index => !getResourceFileByIndex(resource, index))) {
+        return res.status(400).json({ success: false, message: '存在无效文件索引，请刷新后重试' });
+      }
+      const fileIndexes = [...new Set(requestedIndexes.map(Number))]
         .sort((a, b) => b - a);
       if (!fileIndexes.length) return res.status(400).json({ success: false, message: '请选择要删除的文件' });
       if (files.length - fileIndexes.length < 1) {
@@ -802,25 +913,20 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
       }
 
       const deletedFiles = [];
-      for (const { file, absolutePath } of targetFiles) {
-        try {
-          await fs.promises.unlink(absolutePath);
-        } catch (error) {
-          if (error.code !== 'ENOENT') throw error;
-        }
+      for (const { file } of targetFiles) {
         deletedFiles.push(decodeOriginalName(file.originalName));
       }
       for (const { fileIndex } of targetFiles) {
         resource.files.splice(fileIndex, 1);
       }
 
-      await resource.save();
+      await withRecoverableFileDeletion(targetFiles.map(item => item.absolutePath), () => resource.save());
       await logAction(req.user._id, 'batch_delete_siebridge_resource_files', 'siebridgeResource', resource._id, {
         title: resource.title,
         files: deletedFiles,
         count: deletedFiles.length,
         course: resource.course?._id || resource.course
-      }, req);
+      }, req).catch(() => {});
       return res.json({ success: true, resource: serializeResource(resource) });
     } catch (error) {
       res.status(500).json({ success: false, message: '批量删除资料文件失败' });
@@ -834,11 +940,14 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
       const file = getResourceFileByIndex(resource, req.query.file);
       const isPdf = file?.extension === '.pdf';
       const isMarkdown = ['.md', '.markdown'].includes(file?.extension);
-      if (!file || (!isPdf && !isMarkdown)) return res.status(400).json({ success: false, message: '仅 PDF 与 Markdown 支持在线预览' });
+      const isText = file?.extension === '.txt';
+      if (!file || (!isPdf && !isMarkdown && !isText)) return res.status(400).json({ success: false, message: '仅 PDF、Markdown 与文本支持在线预览' });
       const absolutePath = resolveStoredResourcePath(privateUploadDir, file.storedName);
       if (!absolutePath || !fs.existsSync(absolutePath)) return res.status(404).json({ success: false, message: '文件不存在' });
-      if (isMarkdown) {
-        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (isMarkdown || isText) {
+        res.setHeader('Content-Type', isText ? 'text/plain; charset=utf-8' : 'text/markdown; charset=utf-8');
         res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.originalName)}"`);
         return res.send(await fs.promises.readFile(absolutePath, 'utf8'));
       }
@@ -857,9 +966,17 @@ const installSieBridgeRoutes = ({ app, authenticate, logAction, Notification }) 
       const file = getResourceFileByIndex(resource, req.query.file);
       const absolutePath = file ? resolveStoredResourcePath(privateUploadDir, file.storedName) : '';
       if (!file || !absolutePath || !fs.existsSync(absolutePath)) return res.status(404).json({ success: false, message: '文件不存在' });
-      resource.downloadCount += 1;
-      await resource.save();
-      return res.download(absolutePath, file.originalName);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.download(absolutePath, file.originalName, async (error) => {
+        if (!error) {
+          await SiebridgeResource.updateOne({ _id: resource._id }, { $inc: { downloadCount: 1 } }).catch(() => {});
+        } else if (!res.headersSent) {
+          res.status(500).json({ success: false, message: '下载失败' });
+        } else {
+          res.destroy(error);
+        }
+      });
     } catch (error) {
       res.status(500).json({ success: false, message: '下载失败' });
     }
@@ -871,6 +988,12 @@ module.exports = {
   SIEBRIDGE_GRADES,
   SIEBRIDGE_MAJORS,
   SIEBRIDGE_SECTIONS,
+  MAX_REQUEST_SIZE,
+  MAX_USER_STORAGE,
+  canResubmitCourse,
+  canDeleteResource,
+  getResourceFileByIndex,
+  withRecoverableFileDeletion,
   canReviewSieBridge,
   decodeOriginalName,
   formatSiebridgeUploadError,

@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import sieLogo from './assets/LOGO_1.png';
 import siehubLogo from './assets/SIEHUB_LOGO.png';
 import siebridgeLogo from './assets/SIEBridge_LOGO.png';
 import beian from './assets/beian.png';
 import collegeLogo from './assets/SIE_LOGO.svg';
-import { API_BASE } from './api';
+import { API_BASE, requestJson, uploadFeedbackFiles } from './api';
+import AttachmentViewer from './AttachmentViewer';
+import FeedbackPagination from './FeedbackPagination';
+import { buildCalibrations } from './feedbackState';
 import { ServiceHealthNote, useServiceMetrics } from './platformStatus';
+import { sievoxRoleCopy } from './sievoxPortal';
 
 
 // ===================== 全局配置字典 =====================
@@ -125,6 +129,21 @@ const ROLE_SORT_ORDER = {
   department_head: 1,
   youth_league_cadre: 1,
   volunteer: 2
+};
+
+const canManageFeedbackWithdrawal = (user = {}) => {
+  const isStudentRightsLeader = user.role === 'superadmin' &&
+    user.memberRole === 'department_lead' &&
+    user.positionTitle === 'department_head' &&
+    user.organization === 'student_union' &&
+    user.department === 'student_rights';
+  const isAssignedPresidium = user.role === 'superadmin' &&
+    user.memberRole === 'presidium' &&
+    user.positionTitle === 'presidium_member' &&
+    (user.managedDepartments || []).some(item =>
+      item.organization === 'student_union' && item.department === 'student_rights'
+    );
+  return isStudentRightsLeader || isAssignedPresidium;
 };
 const DEPARTMENT_MEMBER_TIERS = [
   { key: 'presidium', rank: 0, label: '主席层级', shortLabel: '主席层级' },
@@ -857,37 +876,6 @@ export const OrganizationFrameworkPanel = ({ token }) => {
 };
 
 // ===================== 附件预览组件 =====================
-export const AttachmentViewer = ({ attachments }) => {
-  if (!attachments || attachments.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-3 mt-3 mb-2">
-     {attachments.map((file, i) => {
-        const url = (file.path || '').startsWith('/api') ? file.path : `/api${file.path || ''}`;
-        const isImage = file.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.path || file.filename);
-        const isVideo = file.mimetype?.startsWith('video/') || /\.(mp4|webm|ogg)$/i.test(file.path || file.filename);
-
-        if (isImage) {
-          return (
-            <a key={i} href={url} target="_blank" rel="noreferrer" className="block w-20 h-20 md:w-24 md:h-24 overflow-hidden rounded-xl border border-white/20 hover:border-purple-500 transition-all shadow-md" onClick={e => e.stopPropagation()}>
-              <img src={url} alt={file.filename} className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" />
-            </a>
-          );
-        }
-        if (isVideo) {
-          return (
-            <video key={i} src={url} controls className="h-20 md:h-24 max-w-[150px] md:max-w-[200px] object-cover rounded-xl border border-white/20 shadow-md" onClick={e => e.stopPropagation()} />
-          );
-        }
-        return (
-          <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs text-purple-200 hover:bg-white/10 hover:text-white transition-all shadow-sm" onClick={e => e.stopPropagation()}>
-            <span>📎</span><span className="truncate max-w-[120px]" title={file.filename}>{file.filename}</span>
-          </a>
-        );
-      })}
-    </div>
-  );
-};
-
 // ===================== 绩效维度配置 =====================
 const PERF_DIMENSIONS = {
   attendance: { label: '考勤积分', max: 20, color: 'purple' },
@@ -1600,6 +1588,7 @@ const BusinessFeedbackWorkspace = ({
   setSelectedReplyFiles,
   updateStatus,
   handleRecallMsg,
+  handleWithdrawFeedback,
   user,
   loading,
   searchQuery,
@@ -1613,11 +1602,14 @@ const BusinessFeedbackWorkspace = ({
   onSelectArchive,
   onClearArchive,
   onArchiveSemester,
-  onExportReport,
-  onOpenArchivePage
+  pagination,
+  onPageChange,
+  summary,
+  replySending,
+  selectedReplyFiles
 }) => {
   const activeFeedback = selectedFeedback || feedbacks.find(item => !item.isRevoked) || feedbacks[0] || null;
-  const counts = {
+  const counts = summary || {
     total: feedbacks.length,
     pending: feedbacks.filter(item => item.status === 'pending').length,
     processing: feedbacks.filter(item => item.status === 'processing').length,
@@ -1633,13 +1625,6 @@ const BusinessFeedbackWorkspace = ({
 
   return (
     <div className="business-feedback-redesign">
-      <div className="admin-tabs" aria-label="管理端功能切换">
-        <button className="is-active" type="button">▦ 业务反馈处理</button>
-        <button type="button" onClick={() => setFilters({ status: '', category: '', priority: '' })}>清空筛选</button>
-        <button type="button" onClick={onExportReport}>导出报表</button>
-        <button type="button" onClick={onOpenArchivePage}>问题归档</button>
-      </div>
-
       {false && (
       <section className="feedback-archive-panel">
         <header>
@@ -1703,9 +1688,9 @@ const BusinessFeedbackWorkspace = ({
             </div>
             <label className="search-field">
               <span>⌕</span>
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索学生、标题或编号" />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索标题或内容" />
             </label>
-            <button className="icon-button" type="button" onClick={() => setFilters({ status: '', category: '', priority: '' })}>↺</button>
+            <button className="icon-button" type="button" title="清空筛选" aria-label="清空筛选" onClick={() => setFilters({ status: '', category: '', priority: '' })}>↺</button>
           </div>
 
           <div className="queue-tabs">
@@ -1747,6 +1732,7 @@ const BusinessFeedbackWorkspace = ({
               );
             })}
           </div>
+          <FeedbackPagination pagination={pagination} onPageChange={onPageChange} loading={loading} />
         </section>
 
         <aside className="case-inspector">
@@ -1776,8 +1762,7 @@ const BusinessFeedbackWorkspace = ({
                     {activeFeedback.responses?.length > 0 && (
                       <ol className="dialog-timeline admin-flow-timeline">
                         {activeFeedback.responses.map((resp, i) => {
-                          const isAdmin = resp.senderType !== 'student';
-                          const canRecall = !resp.isRecalled && isAdmin && (resp.adminId === user?.id || user?.role === 'superadmin');
+                          const canRecall = !resp.isRecalled && resp.canRecall;
                           return (
                             <li key={resp._id || i} className={resp.isRecalled ? '' : 'current'}>
                               <span></span>
@@ -1785,6 +1770,7 @@ const BusinessFeedbackWorkspace = ({
                                 <strong>{resp.senderType === 'student' ? (resp.senderName || '学生留言') : (resp.adminName || resp.senderName || '系统管理员')}</strong>
                                 <small>{new Date(resp.createdAt).toLocaleString('zh-CN')}</small>
                                 <p>{resp.isRecalled && user?.role !== 'superadmin' ? '此消息已撤回' : (resp.content || '状态更新')}</p>
+                                {(!resp.isRecalled || user?.role === 'superadmin') && <AttachmentViewer attachments={resp.attachments} />}
                                 {canRecall && <button className="text-button danger-text" type="button" onClick={() => handleRecallMsg(activeFeedback._id, resp._id)}>撤回</button>}
                               </div>
                             </li>
@@ -1794,19 +1780,21 @@ const BusinessFeedbackWorkspace = ({
                     )}
 
                     <div className="reply-box">
-                      <label>回复学生</label>
-                      <textarea value={responseText} onChange={e => setResponseText(e.target.value)} placeholder="输入处理进展或需要学生补充的信息…" />
+                      <label>回复学生（本事项草稿）</label>
+                      <textarea disabled={replySending} value={responseText} onChange={e => setResponseText(e.target.value)} placeholder="输入处理进展或需要学生补充的信息…" />
                       <div>
-                        <input type="file" multiple onChange={e => setSelectedReplyFiles(Array.from(e.target.files))} />
-                        <button className="send-button" type="button" disabled={isRevoked} onClick={() => updateStatus(activeFeedback._id, activeFeedback.status)}>发送回复</button>
+                        <input type="file" multiple disabled={replySending} key={activeFeedback?._id} onChange={e => setSelectedReplyFiles(Array.from(e.target.files))} />
+                        {selectedReplyFiles.length > 0 && <span>已选择 {selectedReplyFiles.length} 个附件</span>}
+                        <button className="send-button" type="button" disabled={isRevoked || replySending} onClick={() => updateStatus(activeFeedback._id)}>发送回复</button>
                       </div>
                     </div>
                     {!isRevoked && (
-                      <div className="case-action-grid">
+                      <fieldset className="case-action-grid" disabled={replySending}>
                         {activeFeedback.status !== 'processing' && <button className="send-button" type="button" onClick={() => updateStatus(activeFeedback._id, 'processing')}>开始处理</button>}
-                        {activeFeedback.status !== 'resolved' && <button className="resolve-button" type="button" onClick={() => updateStatus(activeFeedback._id, 'resolved')}>标记为已解决</button>}
-                        {activeFeedback.status !== 'rejected' && <button className="outline-button danger-text" type="button" onClick={() => updateStatus(activeFeedback._id, 'rejected')}>拒绝</button>}
-                      </div>
+                        {['pending', 'processing'].includes(activeFeedback.status) && <button className="resolve-button" type="button" onClick={() => updateStatus(activeFeedback._id, 'resolved')}>标记为已解决</button>}
+                        {['pending', 'processing'].includes(activeFeedback.status) && <button className="outline-button danger-text" type="button" onClick={() => updateStatus(activeFeedback._id, 'rejected')}>拒绝</button>}
+                        {canManageFeedbackWithdrawal(user) && <button className="outline-button danger-text" type="button" onClick={() => handleWithdrawFeedback(activeFeedback._id)}>撤回问题</button>}
+                      </fieldset>
                     )}
                   </>
                 );
@@ -1822,10 +1810,16 @@ const BusinessFeedbackWorkspace = ({
 };
 
 // ===================== 主页面: AdminDashboard =====================
-export default function AdminDashboard({ user, token, onLogout, onRefreshUser, onOpenMy, themeTools, portalView, onPortalChange, onBackToHub, language = 'zh', languageSwitcher = null }) {
+export default function AdminDashboard({ user, token, onLogout, onRefreshUser, onOpenMy, onOpenUltimate, onOpenPerformance, themeTools, portalView, onPortalChange, onBackToHub, language = 'zh', languageSwitcher = null, notificationTarget }) {
   const [feedbacks, setFeedbacks] = useState([]);
   const [stats, setStats] = useState(null);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const selectedFeedbackRef = useRef(null);
+  selectedFeedbackRef.current = selectedFeedback;
+  const feedbackRequestRef = useRef(0);
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [feedbackSummary, setFeedbackSummary] = useState(null);
   const [filters, setFilters] = useState({ status: '', category: '', priority: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -1836,8 +1830,14 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
   const [semesterLoadError, setSemesterLoadError] = useState('');
   const [resetStudentId, setResetStudentId] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
-  const [responseText, setResponseText] = useState('');
-  const [selectedReplyFiles, setSelectedReplyFiles] = useState([]);
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const activeFeedbackId = selectedFeedback?._id || feedbacks.find(item => !item.isRevoked)?._id || feedbacks[0]?._id;
+  const responseText = replyDrafts[activeFeedbackId]?.content || '';
+  const selectedReplyFiles = replyDrafts[activeFeedbackId]?.files || [];
+  const setResponseText = content => setReplyDrafts(current => ({ ...current, [activeFeedbackId]: { ...current[activeFeedbackId], content } }));
+  const setSelectedReplyFiles = files => setReplyDrafts(current => ({ ...current, [activeFeedbackId]: { ...current[activeFeedbackId], files } }));
+  const [replySending, setReplySending] = useState(false);
+  const replyInFlight = useRef(false);
   const [showAccountManagement, setShowAccountManagement] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsTab, setSettingsTab] = useState('profile');
@@ -1845,8 +1845,9 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
   const [profileData, setProfileData] = useState({ name: '', studentId: '', email: '', phone: '' });
   const serviceMetrics = useServiceMetrics(token);
   const isUltimateAdmin = Boolean(user?.isUltimateAdmin);
+  const roleCopy = sievoxRoleCopy(user);
   const activePortal = isUltimateAdmin ? (portalView || 'superadmin') : (user?.role === 'admin' ? 'admin' : 'superadmin');
-  const showUltimatePortal = isUltimateAdmin && activePortal === 'superadmin';
+  const showUltimatePortal = isUltimateAdmin && activePortal === 'superadmin' && activeAdminPage === 'feedback';
   const canManageSievoxSemester = Boolean(
     isUltimateAdmin ||
     (user?.moduleCapabilities || []).some(module => (
@@ -1885,6 +1886,8 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
   const [calcDimension, setCalcDimension] = useState('activity');
   const [totalActivitiesCount, setTotalActivitiesCount] = useState(10); 
   const [weightConfig, setWeightConfig] = useState({}); 
+  const [weighting, setWeighting] = useState(false);
+  const weightingInFlight = useRef(false);
 
   // [新增] 批量撤回选中的记录状态
   const [selectedRecordIds, setSelectedRecordIds] = useState([]);
@@ -1926,51 +1929,21 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
 
   // 应用加权计算
   const handleApplyWeighting = async () => {
+    if (weightingInFlight.current) return;
     if (!window.confirm('确定应用加权吗？系统将自动校准该板块得分，并在得分处点亮“已加权”绿标。')) return;
-
-    for (const v of rosterMembers) {
-        const userRecords = performanceRecords.filter(r => r.volunteer?._id === v._id && r.dimension === calcDimension);
-        let attendedWeight = 0;
-        let currentScore = 0;
-        let existingWeightRecordId = null;
-
-        userRecords.forEach(r => {
-            if (r.activityName === '期末系统加权') {
-                existingWeightRecordId = r._id; return;
-            }
-            const nameKey = r.activityName || '未命名/常规记录';
-            if (r.score > 0) {
-                if (weightConfig[nameKey] !== undefined) {
-                    attendedWeight += Number(weightConfig[nameKey]);
-                } else {
-                    attendedWeight += 1;
-                }
-            }
-            currentScore += r.score;
-        });
-        
-        const maxScore = PERF_DIMENSIONS[calcDimension]?.max || 100;
-        const finalScore = (maxScore * attendedWeight) / (totalActivitiesCount || 1);
-        const diff = finalScore - currentScore;
-
-        if (existingWeightRecordId) {
-            await fetch(`${API_BASE}/admin/performance/${existingWeightRecordId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-        }
-
-        await fetch(`${API_BASE}/admin/performance`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({
-                volunteerIds: [v._id], dimension: calcDimension, score: diff.toFixed(2),
-                reason: `期末系统动态加权 (得分占比: ${attendedWeight.toFixed(1)}/${totalActivitiesCount})`,
-                occurrenceDate: new Date().toISOString().split('T')[0], activityName: '期末系统加权', 
-                targetSemester: selectedSemester || currentSemester
-            })
-        });
-    }
-    alert('加权已成功应用！成绩右上角已点亮绿色的“已加权”。');
-    setShowWeightCalc(false);
-    fetchPerformanceAndUsers(selectedSemester);
+    weightingInFlight.current = true;
+    setWeighting(true);
+    try {
+      const calibrations = buildCalibrations({ members: rosterMembers, records: performanceRecords, dimension: calcDimension, maximum: PERF_DIMENSIONS[calcDimension]?.max, totalActivities: totalActivitiesCount, weights: weightConfig });
+      const data = await requestJson('/admin/performance/calibrate', token, {
+        method: 'POST',
+        body: JSON.stringify({ semester: selectedSemester || currentSemester, dimension: calcDimension, calibrations })
+      });
+      alert(`加权已完成，已原子保存 ${data.results?.length ?? calibrations.length} 位成员的结果。`);
+      setShowWeightCalc(false);
+      await fetchPerformanceAndUsers(selectedSemester);
+    } catch (error) { alert(error.message || '加权失败，尚未保存，请重试'); }
+    finally { weightingInFlight.current = false; setWeighting(false); }
   };
 
   const fetchSemesterConfig = useCallback(async () => {
@@ -2068,7 +2041,7 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
     (records || []).forEach(r => { 
         if (scores[r.dimension] !== undefined) {
             scores[r.dimension] += r.score; 
-            if (r.activityName === '期末系统加权') weightedFlags[r.dimension] = true;
+            if (r.isCalibration || r.activityName === '期末系统加权') weightedFlags[r.dimension] = true;
         }
     });
     
@@ -2154,24 +2127,23 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
 
   const markNotificationsRead = async (ids = []) => {
     try {
-      await fetch(`${API_BASE}/notifications/read`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(ids.length ? { ids } : {})
-      });
+      await requestJson('/notifications/read', token, { method: 'PUT', body: JSON.stringify(ids.length ? { ids } : {}) });
       setNotifications(current => current.map(item => (
         ids.length === 0 || ids.includes(item._id) ? { ...item, isRead: true } : item
       )));
-    } catch (err) {}
+    } catch (err) { alert(err.message || '标记已读失败'); }
   };
 
   const openNotification = async (notification) => {
     if (!notification) return;
-    if (!notification.isRead) await markNotificationsRead([notification._id]);
     const feedbackId = notification.feedbackId?._id || notification.feedbackId;
     if (feedbackId) {
-      const matched = feedbacks.find(item => (item._id || item.id) === feedbackId);
-      if (matched) setSelectedFeedback(matched);
+      try {
+        const data = await requestJson(`/feedback/${feedbackId}`, token);
+        setSelectedFeedback(data.feedback);
+        setActiveAdminPage('feedback');
+        if (!notification.isRead) await markNotificationsRead([notification._id]);
+      } catch (error) { alert(error.message); return; }
     }
     setShowNotifs(false);
   };
@@ -2243,9 +2215,12 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
   }, [token, filters, searchQuery]);
 
   const fetchFeedbacks = useCallback(async (showLoading = true) => {
+    const requestId = ++feedbackRequestRef.current;
     if (showLoading) setLoading(true); 
     try {
       const params = new URLSearchParams();
+      params.set('page', String(feedbackPage));
+      params.set('limit', '20');
       if (filters.status) params.append('status', filters.status);
       if (filters.category) params.append('category', filters.category);
       if (filters.priority) params.append('priority', filters.priority);
@@ -2257,10 +2232,28 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.success) setFeedbacks(data.feedbacks || []); 
+      if (data.success && requestId === feedbackRequestRef.current) {
+        setFeedbacks(data.feedbacks || []);
+        setPagination(data.pagination || { page: 1, pages: 1, total: 0 });
+        setFeedbackSummary(data.summary || null);
+        if (data.pagination?.pages > 0 && feedbackPage > data.pagination.pages) setFeedbackPage(data.pagination.pages);
+        const selectedId = selectedFeedbackRef.current?._id;
+        if (selectedId) {
+          const detail = await requestJson(`/feedback/${selectedId}`, token);
+          if (requestId === feedbackRequestRef.current && selectedFeedbackRef.current?._id === selectedId) setSelectedFeedback(detail.feedback);
+        }
+      }
     } catch (err) { console.error('获取反馈失败:', err); }
-    if (showLoading) setLoading(false);
-  }, [token, filters, searchQuery, dateRange]);
+    if (requestId === feedbackRequestRef.current) setLoading(false);
+  }, [token, filters, searchQuery, dateRange, feedbackPage]);
+
+  useEffect(() => { setFeedbackPage(1); }, [filters, searchQuery, dateRange]);
+  useEffect(() => {
+    if (notificationTarget?.feedback) {
+      setSelectedFeedback(notificationTarget.feedback);
+      setActiveAdminPage('feedback');
+    }
+  }, [notificationTarget]);
 
   useEffect(() => {
     fetchStats();
@@ -2353,37 +2346,25 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
   };
 
   const updateStatus = async (feedbackId, status) => {
+    if (replyInFlight.current) return;
+    const draft = replyDrafts[feedbackId] || { content: '', files: [] };
+    if (!status && !draft.content?.trim() && !draft.files?.length) return alert('请填写回复或选择附件');
+    replyInFlight.current = true;
+    setReplySending(true);
     try {
-      let uploadedFiles = [];
-      if (selectedReplyFiles.length > 0) {
-        const fileData = new FormData();
-        selectedReplyFiles.forEach(f => fileData.append('files', f));
-        const uploadRes = await fetch(`${API_BASE}/upload`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: fileData
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadData.success) uploadedFiles = uploadData.files;
-      }
-
-      const res = await fetch(`${API_BASE}/admin/feedback/${feedbackId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ status, response: responseText, attachments: uploadedFiles })
+      const attachments = await uploadFeedbackFiles(draft.files || [], token);
+      const selected = selectedFeedback?._id === feedbackId ? selectedFeedback : feedbacks.find(item => item._id === feedbackId);
+      await requestJson(status ? `/admin/feedback/${feedbackId}/status` : `/feedback/${feedbackId}/reply`, token, {
+        method: status ? 'PATCH' : 'POST',
+        body: JSON.stringify(status ? { status, expectedStatus: selected?.status, response: draft.content || '', attachments } : { content: draft.content || '', attachments })
       });
-      const data = await res.json();
-      if (data.success) {
-        alert('状态更新成功');
-        setResponseText('');
-        setSelectedReplyFiles([]);
-        setSelectedFeedback(null);
-        fetchFeedbacks(false); 
-        fetchStats();
-      } else {
-        alert(data.message || '更新失败');
-      }
-    } catch (err) { alert('网络错误'); }
+      setReplyDrafts(current => { const next = { ...current }; delete next[feedbackId]; return next; });
+      await fetchFeedbacks(false);
+      fetchStats();
+    } catch (error) {
+      alert(error.message || '发送失败，请重试');
+      if (error.status === 409) fetchFeedbacks(false);
+    } finally { replyInFlight.current = false; setReplySending(false); }
   };
 
   const handleResetPassword = async () => {
@@ -2409,13 +2390,31 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
     } catch (err) { alert('网络错误'); }
   };
 
+  const handleWithdrawFeedback = async (feedbackId) => {
+    if (!window.confirm('确定要撤回这条问题吗？撤回后将停止流转并保留审计记录。')) return;
+    try {
+      const res = await fetch(`${API_BASE}/feedback/${feedbackId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedFeedback(null);
+        fetchFeedbacks(false);
+        fetchStats();
+      } else {
+        alert(data.message || '撤回失败');
+      }
+    } catch (err) { alert('网络错误'); }
+  };
+
   const adminPageTitle = activeAdminPage === 'compose'
     ? '发起反馈'
     : activeAdminPage === 'guide'
       ? '服务指南'
       : activeAdminPage === 'archive'
         ? '问题归档'
-        : '权益事务处理台';
+        : roleCopy.title;
 
 // ------------------ 视图渲染 ------------------
   return (
@@ -2430,26 +2429,31 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
         </div>
 
         <nav className="side-nav">
-          <p className="nav-label">学生服务</p>
-          <button className="nav-item" type="button" onClick={() => { setShowAccountManagement(false); clearFeedbackArchive(); setActiveAdminPage('feedback'); }}>
-            <span>▦</span><span>权益工作台</span>
+          <p className="nav-label">反馈工作</p>
+          <button className={`nav-item ${activeAdminPage === 'feedback' ? 'is-active' : ''}`} type="button" onClick={() => { setShowAccountManagement(false); clearFeedbackArchive(); setActiveAdminPage('feedback'); }}>
+            <span>▦</span><span>反馈处理台</span>
+          </button>
+          <button className={`nav-item ${activeAdminPage === 'archive' ? 'is-active' : ''}`} type="button" onClick={() => setActiveAdminPage('archive')}>
+            <span>▱</span><span>问题归档</span>
+          </button>
+          <p className="nav-label">本人服务</p>
+          <button className="nav-item" type="button" onClick={() => onPortalChange?.('student')}>
+            <span>□</span><span>我的反馈</span>
           </button>
           <button className={`nav-item ${activeAdminPage === 'compose' ? 'is-active' : ''}`} type="button" onClick={() => { setShowAccountManagement(false); setActiveAdminPage('compose'); }}>
-            <span>□</span><span>发起反馈</span><kbd>N</kbd>
-          </button>
-          <button className={`nav-item ${activeAdminPage === 'feedback' ? 'is-active' : ''}`} type="button" onClick={() => { setShowAccountManagement(false); clearFeedbackArchive(); setActiveAdminPage('feedback'); }}>
-            <span>▱</span><span>业务反馈</span><span className="nav-count">●</span>
+            <span>＋</span><span>发起反馈</span>
           </button>
           <button className={`nav-item ${activeAdminPage === 'guide' ? 'is-active' : ''}`} type="button" onClick={() => { setShowAccountManagement(false); setActiveAdminPage('guide'); }}>
             <span>◇</span><span>服务指南</span>
           </button>
+          {isUltimateAdmin && onOpenUltimate && <><p className="nav-label">平台治理</p><button className="nav-item" type="button" onClick={onOpenUltimate}><span>◈</span><span>组织与账号</span></button></>}
         </nav>
 
         <ServiceHealthNote metrics={serviceMetrics.metrics} loading={serviceMetrics.loading} error={serviceMetrics.error} language={language} />
 
         <div className="sidebar-user">
           <span className="avatar">{(user?.name || '管').slice(0, 1)}</span>
-          <div><strong>{user?.name}</strong><span>{user?.studentId}</span><RoleTag user={user} /></div>
+          <div><strong>{user?.name}</strong><span>{roleCopy.scope}</span><RoleTag user={user} /></div>
         </div>
       </aside>
 
@@ -2464,9 +2468,9 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
         <div className="topbar-actions">
           {isUltimateAdmin && (
             <div className="role-switch" aria-label="当前身份">
-              <button className={activePortal === 'student' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('student')}>学生端</button>
-              <button className={activePortal === 'admin' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('admin')}>管理端</button>
-              <button className={activePortal === 'superadmin' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('superadmin')}>超级管理员</button>
+              <button type="button" onClick={() => onPortalChange?.('student')}>本人反馈</button>
+              <button className={activePortal === 'admin' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('admin')}>反馈处理台</button>
+              <button className={activePortal === 'superadmin' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('superadmin')}>终极管理</button>
             </div>
           )}
           {onBackToHub && (
@@ -2475,10 +2479,13 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
               <span>返回 SIEHUB</span>
             </button>
           )}
+          {onOpenPerformance && <button className="hub-inline-return" type="button" onClick={onOpenPerformance}>绩效考核</button>}
           <div className="topbar-user-chip" aria-label="当前登录身份">
             <span>{user?.name}</span>
             <RoleTag user={user} />
           </div>
+          <button className="icon-button" type="button" onClick={() => setShowNotifs(true)} title="消息通知" aria-label={`消息通知，${unreadNotificationCount} 条未读`}>📬{unreadNotificationCount > 0 && <span className="notification-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}</button>
+          <button className="hub-inline-return sievox-account-settings" type="button" onClick={onOpenMy}>账号设置</button>
           <AdminThemeModeButtons themeTools={themeTools} />
           <button className="icon-button theme-trigger" type="button" onClick={() => themeTools?.setOpen?.(true)} aria-label="外观设置">🎨</button>
           {languageSwitcher}
@@ -2553,55 +2560,64 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
         </div>}
       </header>
 
+      {showNotifs && <div className="notification-drawer-backdrop" onClick={() => setShowNotifs(false)}>
+        <aside className="notification-drawer" aria-label="消息通知" onClick={event => event.stopPropagation()}>
+          <header className="notification-drawer-head"><div><p>MESSAGES</p><h2>消息通知</h2><span>未读 {unreadNotificationCount}</span></div><button className="icon-button" type="button" onClick={() => setShowNotifs(false)} aria-label="关闭通知">×</button></header>
+          <div className="notification-drawer-actions"><button className="outline-button" type="button" disabled={unreadNotificationCount === 0} onClick={() => markNotificationsRead()}>全部标为已读</button></div>
+          <div className="notification-drawer-list">{notifications.length === 0 ? <p className="siehub-empty-text">暂无消息。</p> : notifications.map(item => <button key={item._id} type="button" className={`notification-item ${item.isRead ? '' : 'is-unread'}`} onClick={() => openNotification(item)}><div><strong>{item.type === 'new_feedback' ? '新反馈' : item.type === 'new_message' ? '新留言' : '状态更新'}</strong><p>{item.content}</p><small>{new Date(item.createdAt).toLocaleString('zh-CN')}</small></div>{!item.isRead && <span className="notification-unread-dot" />}</button>)}</div>
+        </aside>
+      </div>}
+
+      <nav className="sievox-admin-mobile-nav" aria-label="反馈系统导航">
+        <button className={activeAdminPage === 'feedback' ? 'is-active' : ''} type="button" onClick={() => { clearFeedbackArchive(); setActiveAdminPage('feedback'); }}>处理台</button>
+        <button className={activeAdminPage === 'archive' ? 'is-active' : ''} type="button" onClick={() => setActiveAdminPage('archive')}>归档</button>
+        <button className={activeAdminPage === 'compose' ? 'is-active' : ''} type="button" onClick={() => setActiveAdminPage('compose')}>发起反馈</button>
+        <button className={activeAdminPage === 'guide' ? 'is-active' : ''} type="button" onClick={() => setActiveAdminPage('guide')}>指南</button>
+        <button type="button" onClick={() => onPortalChange?.('student')}>我的反馈</button>
+        {onOpenPerformance && <button type="button" onClick={onOpenPerformance}>绩效</button>}
+        <button type="button" onClick={onOpenMy}>账号</button>
+        {isUltimateAdmin && onOpenUltimate && <button type="button" onClick={onOpenUltimate}>组织治理</button>}
+      </nav>
+
       {/* 主体内容区 */}
       <section className={showUltimatePortal ? 'role-view superadmin-view' : 'role-view'}>
         {showUltimatePortal ? (
           <>
             <div className="superadmin-hero">
               <div>
-                <p className="eyebrow">SUPER ADMIN CONSOLE</p>
-                <h1>学院权益治理总控台</h1>
-                <p>统一查看账号权限、子管理员处理轨迹、学期绩效与成员名单，给系统运行留下一条清楚的治理账本。</p>
+                <p className="eyebrow">SIEVOX · 权益治理</p>
+                <h1>{roleCopy.title}</h1>
+                <p>{roleCopy.scope}。在这里查看反馈进度；账号与届次请进入组织治理。</p>
               </div>
               <div className="superadmin-badge"><span>当前模块</span><strong>业务反馈</strong></div>
             </div>
             <div className="superadmin-metrics">
-              <div><span>系统账户</span><strong>{stats?.totalUsers || 326}</strong><small>学生 / 管理员 / 超管</small></div>
-              <div><span>有效反馈</span><strong>{stats?.total || 0}</strong><small>当前筛选范围内</small></div>
-              <div><span>待复核操作</span><strong>{stats?.pending || 7}</strong><small className="warning-text">含撤回回复</small></div>
-              <div><span>绩效平均分</span><strong>86.5</strong><small>较上月 +4.2</small></div>
+              <div><span>有效反馈</span><strong>{stats?.total ?? '—'}</strong><small>全部职责范围</small></div>
+              <div><span>待受理</span><strong>{stats?.pending ?? '—'}</strong><small>需要及时查看</small></div>
+              <div><span>处理中</span><strong>{stats?.processing ?? '—'}</strong><small>持续跟进</small></div>
+              <div><span>已解决</span><strong>{stats?.resolved ?? '—'}</strong><small>累计处理完成</small></div>
             </div>
           </>
         ) : (
           <>
             <div className="admin-heading">
               <div>
-                <p className="eyebrow">OPERATIONS DESK</p>
+                <p className="eyebrow">SIEVOX · 反馈处理</p>
                 <h1>{adminPageTitle}</h1>
-                <p>{currentSemester || semesterLoadError || '学期信息加载中'} · 国际教育学院</p>
+                <p>{roleCopy.scope}</p>
               </div>
               <div className="admin-actions">
-                <button className="outline-button" type="button" onClick={exportFeedbackReport}>导出报表</button>
-                {showUltimatePortal && <button className="primary-button">账号管理</button>}
+                {activeAdminPage === 'feedback' && <button className="outline-button" type="button" onClick={exportFeedbackReport}>导出报表</button>}
               </div>
             </div>
-            <div className="admin-metrics">
-              <div><span>待受理</span><strong>{stats?.pending || 0}</strong><small className="warning-text">请及时处理</small></div>
-              <div><span>处理中</span><strong>{stats?.processing || 0}</strong><small>持续跟进</small></div>
-              <div><span>本周解决</span><strong>{stats?.resolved || 0}</strong><small className="success-text">解决率提升中</small></div>
-              <div className="sla-meter"><span>24h 首响达标率</span><strong>92.4%</strong><div><i></i></div><small>目标值 90%</small></div>
-            </div>
+            {activeAdminPage === 'feedback' && <div className="admin-metrics">
+              <div><span>有效反馈</span><strong>{stats?.total ?? '—'}</strong><small>本职责范围</small></div>
+              <div><span>待受理</span><strong>{stats?.pending ?? '—'}</strong><small>请及时处理</small></div>
+              <div><span>处理中</span><strong>{stats?.processing ?? '—'}</strong><small>持续跟进</small></div>
+              <div><span>已解决</span><strong>{stats?.resolved ?? '—'}</strong><small>累计处理完成</small></div>
+            </div>}
           </>
         )}
-        {activeAdminPage === 'feedback' && <div className="superadmin-tabs admin-module-tabs">
-          <button
-            onClick={() => { setShowAccountManagement(false); }}
-            className={!showAccountManagement ? 'is-active' : ''}
-          >
-            <span>📋</span> 业务反馈处理
-          </button>
-          
-        </div>}
 
         {false ? (
           <div className={`performance-redesign-panel ${user?.role === 'superadmin' ? 'super-performance-redesign' : 'self-performance-redesign'} animate-fadeIn space-y-4 md:space-y-6`}>
@@ -2949,6 +2965,11 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
               />
             ) : (
               <BusinessFeedbackWorkspace
+                pagination={pagination}
+                onPageChange={setFeedbackPage}
+                summary={feedbackSummary}
+                replySending={replySending}
+                selectedReplyFiles={selectedReplyFiles}
                 feedbacks={feedbacks}
                 archives={feedbackArchives}
                 selectedFeedback={selectedFeedback}
@@ -2958,6 +2979,7 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
                 setSelectedReplyFiles={setSelectedReplyFiles}
                 updateStatus={updateStatus}
                 handleRecallMsg={handleRecallMsg}
+                handleWithdrawFeedback={handleWithdrawFeedback}
                 user={user}
                 loading={loading}
                 searchQuery={searchQuery}
@@ -2971,8 +2993,6 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
                 onSelectArchive={selectFeedbackArchive}
                 onClearArchive={clearFeedbackArchive}
                 onArchiveSemester={handleArchiveSemester}
-                onExportReport={exportFeedbackReport}
-                onOpenArchivePage={() => setActiveAdminPage('archive')}
               />
             )}
             <div className="legacy-feedback-content" hidden>
@@ -3247,7 +3267,7 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
             
             <div className="flex flex-wrap items-center justify-between mb-4 pr-8">
               <h3 className="text-xl font-bold text-white flex items-center gap-2"><span>🧮</span> 期末分数动态加权结算器</h3>
-              <button onClick={handleApplyWeighting} className="px-5 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]">
+              <button disabled={weighting} onClick={handleApplyWeighting} className="px-5 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]">
                 ✓ 确认并应用加权到总分
               </button>
             </div>
@@ -3259,7 +3279,7 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
                 <div>
                   <label className="text-xs text-purple-200/60 mb-1 block">1. 选择需加权结算的板块</label>
                   <select value={calcDimension} onChange={e => setCalcDimension(e.target.value)} className="w-full px-3 py-2 bg-slate-950 rounded-lg text-white border border-white/10 outline-none focus:border-blue-500 transition-colors">
-                    {Object.entries(PERF_DIMENSIONS).map(([k, v]) => <option key={k} value={k}>{v.label} (满分 {v.max})</option>)}
+                    {Object.entries(PERF_DIMENSIONS).filter(([, value]) => Number.isFinite(Number(value.max))).map(([k, v]) => <option key={k} value={k}>{v.label} (满分 {v.max})</option>)}
                   </select>
                 </div>
                 <div>
@@ -3297,22 +3317,12 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {rosterMembers.map(v => {
-                        const userRecords = performanceRecords.filter(r => r.volunteer?._id === v._id && r.dimension === calcDimension);
-                        let attendedWeight = 0;
-                        userRecords.forEach(r => {
-                          if (r.activityName === '期末系统加权') return; 
-                          const nameKey = r.activityName || '未命名/常规记录';
-                          if (r.score > 0) {
-                              if (weightConfig[nameKey] !== undefined) {
-                                  attendedWeight += Number(weightConfig[nameKey]);
-                              } else {
-                                  attendedWeight += 1;
-                              }
-                          }
-                        });
-                        const maxScore = PERF_DIMENSIONS[calcDimension]?.max || 100;
-                        const finalScore = (maxScore * attendedWeight) / (totalActivitiesCount || 1);
-                        return { user: v, count: userRecords.filter(r => r.score > 0 && r.activityName !== '期末系统加权').length, weight: attendedWeight, score: finalScore };
+                        const userRecords = performanceRecords.filter(r => r.volunteer?._id === v._id && r.dimension === calcDimension && !r.isCalibration && r.activityName !== '期末系统加权');
+                        const activities = [...new Set(userRecords.filter(r => Number(r.score) > 0).map(r => r.activityName || `record:${r._id}`))];
+                        const attendedWeight = activities.reduce((sum, name) => sum + Number(weightConfig[name] ?? 1), 0);
+                        const maxScore = Number(PERF_DIMENSIONS[calcDimension]?.max) || 0;
+                        const finalScore = Math.min(maxScore, maxScore * attendedWeight / (totalActivitiesCount || 1));
+                        return { user: v, count: activities.length, weight: attendedWeight, score: finalScore };
                       }).sort((a, b) => b.score - a.score).map((data, idx) => (
                         <tr key={idx} className="hover:bg-white/5">
                           <td className="py-3 pl-4 font-medium text-white">{data.user.name}</td>
@@ -3395,7 +3405,7 @@ export default function AdminDashboard({ user, token, onLogout, onRefreshUser, o
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm text-slate-600 dark:text-purple-200/80 transition-colors">学号</label>
-                    <input type="text" required value={profileData.studentId} onChange={e => setProfileData({...profileData, studentId: e.target.value})} className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white focus:outline-none focus:border-purple-500 transition-colors" />
+                    <input type="text" required value={profileData.studentId} readOnly className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white focus:outline-none focus:border-purple-500 transition-colors" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm text-slate-600 dark:text-purple-200/80 transition-colors">姓名</label>

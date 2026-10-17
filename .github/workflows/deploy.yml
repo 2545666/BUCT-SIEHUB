@@ -1,48 +1,57 @@
-name: 🚀 自动部署到服务器
+name: Deploy SIEVOX
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
+
+concurrency:
+  group: sievox-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    name: 部署应用
     runs-on: ubuntu-latest
     
     steps:
       - name: 📥 检出代码
         uses: actions/checkout@v4
-      
-      - name: 🚀 部署到服务器
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Test and build
+        run: |
+          npm ci --prefix backend
+          npm test --prefix backend
+          npm ci --prefix frontend
+          npm test --prefix frontend
+          npm run build --prefix frontend
+          tar --exclude=backend/node_modules --exclude='backend/.env*' --exclude='*uploads*' --exclude=backend/ssl -czf sievox-release.tar.gz backend frontend/dist frontend/src frontend/public frontend/package.json frontend/package-lock.json frontend/index.html frontend/vite.config.js frontend/tailwind.config.js frontend/postcss.config.js scripts/deploy-sievox.sh
+      - name: Upload release
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: sievox-release.tar.gz
+          target: /var/tmp/sievox-deploy-${{ github.run_id }}
+      - name: Deploy current site
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 20m
           script_stop: true
           script: |
-            cd /var/www/student-feedback-system
-            
-            echo "📥 拉取最新代码..."
-            git pull origin main
-            
-            echo "📦 安装后端依赖..."
-            cd backend
-            npm ci --production
-            
-            echo "🔄 重启后端服务..."
-            pm2 restart feedback-backend || pm2 start server.js --name feedback-backend
-            
-            echo "📦 构建前端..."
-            cd ../frontend
-            npm ci
-            npm run build
-            
-            echo "📂 部署前端文件..."
-            sudo cp -r dist/* /var/www/html/
-            
-            echo "✅ 部署完成！"
+            set -eu
+            release=/var/tmp/sievox-deploy-${{ github.run_id }}
+            tar -xzf "$release/sievox-release.tar.gz" -C "$release"
+            bash "$release/scripts/deploy-sievox.sh" "$release"
       
       - name: ✅ 部署成功通知
         if: success()

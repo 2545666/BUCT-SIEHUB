@@ -19,11 +19,9 @@ jobs:
           echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_test
           chmod 600 ~/.ssh/id_test
           
-          # 3. 检查私钥格式（只看头尾，不泄露内容）
+          # 3. 验证私钥并只显示公钥指纹
           echo "=== 私钥格式检查 ==="
-          head -n 2 ~/.ssh/id_test
-          echo "..."
-          tail -n 2 ~/.ssh/id_test
+          ssh-keygen -y -f ~/.ssh/id_test | ssh-keygen -lf -
           echo "=================="
           
           # 4. 添加主机指纹

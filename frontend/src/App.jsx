@@ -17,8 +17,15 @@ import siebridgeLogo from './assets/SIEBridge_LOGO.png';
 import collegeLogo from './assets/SIE_LOGO.svg';
 import buctLogo from './assets/BUCT_LOGO_blue.png';
 import beianIcon from './assets/beian.png';
-import { API_BASE } from './api';
+import { API_BASE, readStoredToken, persistSessionToken, clearSessionToken, subscribeSessionChanges, requestJson, uploadFeedbackFiles, resolveMediaUrl } from './api';
+import AttachmentViewer from './AttachmentViewer';
+import FeedbackPagination from './FeedbackPagination';
+import DepartmentPerformanceParticipation from './DepartmentPerformanceParticipation';
+import { responseSenderLabel } from './feedbackState';
+import { nextTranslatedValue } from './languageState';
+import { emptyFeedbackDraft, feedbackDraftStore } from './feedbackDraft';
 import { ServiceHealthNote, formatAverageFirstResponse, usePlatformClock, useServiceMetrics } from './platformStatus';
+import { defaultSievoxPortalView, getSievoxPortalRole, resolveSievoxPortalView } from './sievoxPortal';
 import { SIEBridgeReviewWorkspace, SIEBridgeStudentPortal } from './SIEBridge';
 import {
   DepartmentIntroductionEditor,
@@ -108,8 +115,6 @@ const THEME_COLORS = [
 ];
 
 const cls = (...items) => items.filter(Boolean).join(' ');
-const AUTH_TOKEN_KEY = 'siehub_auth_token_v2';
-const LEGACY_AUTH_TOKEN_KEY = 'token';
 const PRIVACY_NOTICE_KEY = 'siehub_privacy_notice_v1';
 const LANGUAGE_KEY = 'siehub_language_v1';
 const SIEVOX_URL = import.meta.env.VITE_SIEVOX_URL || '';
@@ -135,13 +140,17 @@ const SIEHUB_NAMED_PATHS = {
   departments: '/departments',
   department: '/departments',
   sievox: '/rights',
-  siebridge: '/siebridge'
+  siebridge: '/siebridge',
+  my: '/account',
+  ultimateOrganization: '/organization'
 };
 const getSurfaceFromPath = (pathname = '') => {
   const normalized = String(pathname || '').replace(/\/+$/, '').toLowerCase() || '/';
   if (normalized === '/departments') return 'departments';
   if (normalized === '/rights') return 'sievox';
   if (normalized === '/siebridge') return 'siebridge';
+  if (normalized === '/account') return 'my';
+  if (normalized === '/organization') return 'ultimateOrganization';
   return '';
 };
 const getPathForSurface = (surface = '') => SIEHUB_NAMED_PATHS[surface] || '/';
@@ -852,9 +861,9 @@ const useLanguage = () => {
     let textNode = walker.nextNode();
     while (textNode) {
       if (!shouldSkipTranslation(textNode)) {
-        if (!textOriginals.current.has(textNode)) textOriginals.current.set(textNode, textNode.nodeValue);
-        const original = textOriginals.current.get(textNode);
-        textNode.nodeValue = mode === 'en' ? translateTextValue(original) : original;
+        const { original, rendered } = nextTranslatedValue(textOriginals.current.get(textNode), textNode.nodeValue, mode, translateTextValue);
+        textOriginals.current.set(textNode, { original, rendered });
+        if (textNode.nodeValue !== rendered) textNode.nodeValue = rendered;
       }
       textNode = walker.nextNode();
     }
@@ -868,8 +877,10 @@ const useLanguage = () => {
       }
       TRANSLATABLE_ATTRS.forEach(attr => {
         if (!element.hasAttribute(attr)) return;
-        if (originals[attr] === undefined) originals[attr] = element.getAttribute(attr);
-        element.setAttribute(attr, mode === 'en' ? translateTextValue(originals[attr]) : originals[attr]);
+        const current = element.getAttribute(attr);
+        const { original, rendered } = nextTranslatedValue(originals[attr], current, mode, translateTextValue);
+        originals[attr] = { original, rendered };
+        if (current !== rendered) element.setAttribute(attr, rendered);
       });
     });
 
@@ -963,55 +974,42 @@ const PRIVACY_TERMS_EN = [
   }
 ];
 
-const readStoredToken = () => {
-  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
-  return sessionStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY);
-};
-
 const getCategory = (value) => CATEGORIES_CONFIG[value] || CATEGORIES_CONFIG.comprehensive;
 const formatDate = (value) => value ? new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '刚刚';
 const firstChar = (name = '赵') => name.trim().slice(0, 1) || '赵';
 
-export const AttachmentViewer = ({ attachments }) => {
-  if (!attachments || attachments.length === 0) return null;
-  return (
-    <div className="attachment-strip">
-      {attachments.map((file, i) => {
-        const path = file.path || '';
-        const url = path.startsWith('/api') ? path : `/api${path}`;
-        const isImage = file.mimetype?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(path || file.filename);
-        if (isImage) {
-          return <a key={i} href={url} target="_blank" rel="noreferrer"><img src={url} alt={file.filename || '附件'} /></a>;
-        }
-        return <a key={i} href={url} target="_blank" rel="noreferrer"><Paperclip />{file.filename || '附件'}</a>;
-      })}
-    </div>
-  );
-};
-
 const useAuth = () => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(readStoredToken);
+  const [authError, setAuthError] = useState('');
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+    const currentToken = readStoredToken();
+    if (currentToken) requestJson('/auth/logout', currentToken, { method: 'POST' }).catch(() => {});
+    clearSessionToken();
     setToken(null);
     setUser(null);
+    setAuthError('');
   }, []);
 
   const refreshUser = useCallback(async () => {
     if (!token) return;
+    setAuthError('');
     try {
-      const res = await fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (data.success) setUser(data.user);
-      else logout();
-    } catch {
-      logout();
+      const data = await requestJson('/auth/me', token);
+      if (readStoredToken() === token) setUser(data.user);
+    } catch (error) {
+      if (readStoredToken() === token) setAuthError(error.message || '暂时无法验证登录，请检查连接后重试');
     }
-  }, [token, logout]);
+  }, [token]);
+
+  useEffect(() => subscribeSessionChanges(nextToken => {
+    if (tokenRef.current !== nextToken) setUser(null);
+    setToken(nextToken);
+    setAuthError('');
+  }), []);
 
   useEffect(() => { refreshUser(); }, [refreshUser]);
 
@@ -1023,14 +1021,7 @@ const useAuth = () => {
     });
     const data = await res.json();
     if (data.success) {
-      localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
-      if (remember) {
-        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
-        sessionStorage.removeItem(AUTH_TOKEN_KEY);
-      } else {
-        sessionStorage.setItem(AUTH_TOKEN_KEY, data.token);
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-      }
+      persistSessionToken(data.token, remember);
       setToken(data.token);
       setUser(data.user);
     }
@@ -1046,7 +1037,7 @@ const useAuth = () => {
     return res.json();
   };
 
-  return { user, token, login, register, logout, refreshUser };
+  return { user, token, login, register, logout, refreshUser, authError };
 };
 
 export const useTheme = () => {
@@ -1282,7 +1273,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
     if (!isLogin && !/^\d{6}$/.test(form.emailCode.trim())) return setError('请输入6位邮箱验证码。');
     setLoading(true);
     try {
-      const data = isLogin ? await onLogin(form.studentId, form.password, remember || isMobileClient) : await onRegister(form);
+      const data = isLogin ? await onLogin(form.studentId, form.password, remember) : await onRegister(form);
       if (!data.success) setError(data.message || (isLogin ? '登录失败' : '注册失败'));
       else if (!isLogin) {
         setIsLogin(true);
@@ -1615,39 +1606,6 @@ const canReviewSIEBridgeContent = (user) => {
   return Boolean(matchedAccess?.capabilities?.includes('review_siebridge_content'));
 };
 
-const canManageSIEVOXContent = (user) => {
-  if (user?.isUltimateAdmin) return true;
-  const matchedAccess = getModuleAccess(user, { key: 'student_rights', organization: 'student_union' });
-  return Boolean(
-    matchedAccess?.accessLevel === 'manage' ||
-    matchedAccess?.capabilities?.some(capability => [
-      'enter_manage_portal',
-      'manage_module',
-      'manage_department_members',
-      'manage_department_accounts',
-      'manage_department_performance',
-      'manage_volunteer_performance_policy'
-    ].includes(capability))
-  );
-};
-
-const isSIEVOXSuperAdminRole = (user) => {
-  if (user?.isUltimateAdmin) return true;
-  const matchedAccess = getModuleAccess(user, { key: 'student_rights', organization: 'student_union' });
-  const hasStudentRightsScope = Boolean(matchedAccess?.accessLevel === 'manage');
-  return hasStudentRightsScope && [
-    'department_head',
-    'presidium_member',
-    'youth_league_deputy_secretary'
-  ].includes(user?.positionTitle);
-};
-
-const getDefaultSIEVOXPortalView = (user) => {
-  if (isSIEVOXSuperAdminRole(user)) return 'superadmin';
-  if (canManageSIEVOXContent(user)) return 'admin';
-  return 'student';
-};
-
 const DepartmentModuleMark = ({ module, showLogo = true }) => {
   const Icon = module?.icon || Building2;
   if (showLogo && module?.logo) return <img className="siehub-module-logo" src={module.logo} alt={`${module.title || '部门'} logo`} />;
@@ -1682,7 +1640,9 @@ const createPolicyDraft = (policy = DEFAULT_VOLUNTEER_PERFORMANCE_POLICY) => ({
     color: item.color || item.tone || 'slate',
     rule: item.rule
   })),
-  notes: policy.notes?.length ? [...policy.notes] : [...DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.notes]
+  notes: policy.notes?.length ? [...policy.notes] : [...DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.notes],
+  evaluationSources: policy.evaluationSources?.length ? [...policy.evaluationSources] : ['self', 'leader'],
+  evaluationWeights: { ...(policy.evaluationWeights || { self: 30, leader: 70 }) }
 });
 
 const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, saving, message, onSave, onReset }) => {
@@ -1709,6 +1669,8 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
       })
     }));
   };
+  const addDimension = () => setDraft(current => ({ ...current, dimensions: [...current.dimensions, { key: `custom_${Date.now()}`, label: '新板块', maxScore: 10, capLabel: '10分', color: 'slate', rule: '请填写评分细则' }] }));
+  const removeDimension = (key) => setDraft(current => ({ ...current, dimensions: current.dimensions.filter(item => item.key !== key) }));
 
   const submitDraft = async () => {
     if (!onSave) return;
@@ -1763,6 +1725,12 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
           <span>制度说明</span>
           <textarea value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} rows={3} />
         </label>
+        {module?.key !== 'student_rights' && <>
+          <label><span>评价来源（逗号分隔）</span><input value={(draft.evaluationSources || []).join(',')} onChange={event => setDraft(current => ({ ...current, evaluationSources: event.target.value.split(',').map(item => item.trim()).filter(Boolean) }))} /></label>
+          <label><span>自评权重（%）</span><input type="number" value={draft.evaluationWeights?.self ?? 30} onChange={event => setDraft(current => ({ ...current, evaluationWeights: { ...current.evaluationWeights, self: Number(event.target.value || 0) } }))} /></label>
+          <label><span>负责人权重（%）</span><input type="number" value={draft.evaluationWeights?.leader ?? 70} onChange={event => setDraft(current => ({ ...current, evaluationWeights: { ...current.evaluationWeights, leader: Number(event.target.value || 0) } }))} /></label>
+          <button type="button" className="outline-button" onClick={addDimension}>新增绩效板块</button>
+        </>}
       </div>
     )}
     <div className="siehub-policy-grid">
@@ -1786,6 +1754,7 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
                 </label>
               </div>
               <textarea value={draft.dimensions.find(d => d.key === item.key)?.rule || item.rule} onChange={event => updateDraftDimension(item.key, 'rule', event.target.value)} rows={4} />
+              {module?.key !== 'student_rights' && <button type="button" className="ghost" onClick={() => removeDimension(item.key)}>删除板块</button>}
             </>
           ) : (
             <>
@@ -1827,7 +1796,7 @@ const calculateDepartmentScoreRows = (records = [], roster = [], policy = DEFAUL
   return Array.from(rows.values()).sort((a, b) => b.total - a.total);
 };
 
-const DepartmentPerformanceWorkbench = ({ module, token, canManage }) => {
+const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '', onPeriodChange }) => {
   const [workbench, setWorkbench] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1847,12 +1816,14 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage }) => {
     if (!module?.organization || !module?.key || !token || !canManage) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/hub/departments/${module.organization}/${module.key}/performance-workbench`, {
+      const query = period ? `?semester=${encodeURIComponent(period)}` : '';
+      const res = await fetch(`${API_BASE}/hub/departments/${module.organization}/${module.key}/performance-workbench${query}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || '获取部门绩效工作台失败');
       setWorkbench(data);
+      if (!period) onPeriodChange?.(data.semester);
       const rosterIds = (data.roster || []).map(user => user.id || user._id);
       setRosterSelection(rosterIds);
       setRecordSelection(current => current.filter(id => rosterIds.includes(id)));
@@ -1866,7 +1837,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage }) => {
     } finally {
       setLoading(false);
     }
-  }, [module?.organization, module?.key, token, canManage]);
+  }, [module?.organization, module?.key, token, canManage, period, onPeriodChange]);
 
   useEffect(() => {
     refreshWorkbench();
@@ -1961,7 +1932,13 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage }) => {
           <h3>部门绩效工作台</h3>
           <span>{workbench?.semester || '当前学期'} · 添加成员、批量录入、查看流水与排行。</span>
         </div>
-        <button type="button" onClick={refreshWorkbench} disabled={loading || saving}>{loading ? '同步中' : '刷新'}</button>
+        <div className="unified-performance-period">
+          <label htmlFor={`manage-performance-period-${module.key}`}>考核学期</label>
+          <select id={`manage-performance-period-${module.key}`} value={period || workbench?.semester || ''} onChange={event => onPeriodChange?.(event.target.value)} disabled={loading || saving}>
+            {(workbench?.semesters || []).map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <button type="button" onClick={refreshWorkbench} disabled={loading || saving}>{loading ? '同步中' : '刷新'}</button>
+        </div>
       </div>
       {message && <div className="siehub-policy-message">{message}</div>}
       <div className="siehub-performance-stats">
@@ -2086,7 +2063,7 @@ const DepartmentAccountWorkspace = ({ module, token, canManage, language = 'zh' 
       <div className="siehub-account-list">
         {accounts.map(account => (
           <article key={account._id}>
-            <span className="siehub-avatar">{account.avatarUrl ? <img src={account.avatarUrl} alt="" /> : firstChar(account.name)}</span>
+            <span className="siehub-avatar">{account.avatarUrl ? <img src={resolveMediaUrl(account.avatarUrl)} alt="" /> : firstChar(account.name)}</span>
             <div>
               <strong>{account.name}</strong>
               <small>{account.studentId} · {account.identityLabel || '-'}</small>
@@ -2424,7 +2401,7 @@ const DepartmentMemberWorkspace = ({ module, token, canManage, language = 'zh' }
                 <div className="siehub-member-grid compact">
                   {group.members.map(member => (
                     <article key={member.id || member.userId} className="siehub-member-tier-card" data-tier={group.rank}>
-                      <span className="siehub-avatar">{member.avatarUrl ? <img src={member.avatarUrl} alt="" /> : firstChar(member.name)}</span>
+                      <span className="siehub-avatar">{member.avatarUrl ? <img src={resolveMediaUrl(member.avatarUrl)} alt="" /> : firstChar(member.name)}</span>
                       <div>
                         <strong>{member.name}</strong>
                         <small>{member.studentId}</small>
@@ -2471,7 +2448,7 @@ const DepartmentMemberWorkspace = ({ module, token, canManage, language = 'zh' }
                     <div className="siehub-member-grid compact">
                       {tier.members.map(member => (
                         <article key={member.id || `${group.cohort?.id}-${member.studentId}`} className="siehub-member-tier-card" data-tier={tier.rank}>
-                          <span className="siehub-avatar">{member.avatarUrl ? <img src={member.avatarUrl} alt="" /> : firstChar(member.name)}</span>
+                          <span className="siehub-avatar">{member.avatarUrl ? <img src={resolveMediaUrl(member.avatarUrl)} alt="" /> : firstChar(member.name)}</span>
                           <div>
                             <strong>{member.name}</strong>
                             <small>{member.studentId}</small>
@@ -2510,7 +2487,7 @@ const getAccessibleModules = (user) => {
 
 const HubUserChip = ({ user }) => (
   <div className="siehub-user-chip" aria-label="当前登录身份">
-    <span className="siehub-avatar">{user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : firstChar(user?.name)}</span>
+    <span className="siehub-avatar">{user?.avatarUrl ? <img src={resolveMediaUrl(user.avatarUrl)} alt="" /> : firstChar(user?.name)}</span>
     <span><strong>{user?.name}</strong><small>{user?.studentId}</small></span>
     <RoleTag user={user} />
   </div>
@@ -2538,6 +2515,9 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
   const [logs, setLogs] = useState([]);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [emailVerification, setEmailVerification] = useState({ currentPassword: '', emailCode: '' });
+  const [emailSending, setEmailSending] = useState(false);
+  const emailChanged = profile.email.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase();
   const showSecurity = canViewMySecurityTools(user);
 
   useEffect(() => {
@@ -2557,6 +2537,16 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
 
   useEffect(() => { refreshLogs(); }, [refreshLogs]);
 
+  const sendProfileEmailCode = async () => {
+    if (!emailVerification.currentPassword) return setMessage('请先输入当前密码');
+    setEmailSending(true);
+    try {
+      const data = await requestJson('/auth/email-code/profile-email', token, { method: 'POST', body: JSON.stringify({ email: profile.email, currentPassword: emailVerification.currentPassword }) });
+      setMessage(data.message || '验证码已发送至新邮箱');
+    } catch (error) { setMessage(error.message); }
+    finally { setEmailSending(false); }
+  };
+
   const saveProfile = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -2565,10 +2555,11 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
       const res = await fetch(`${API_BASE}/auth/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(profile)
+        body: JSON.stringify({ ...profile, studentId: user.studentId, ...(emailChanged ? emailVerification : {}) })
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || '资料保存失败');
+      if (data.sessionRevoked) { alert('邮箱已更新，请重新登录'); onLogout(); return; }
       await onRefreshUser?.();
       setMessage('资料已更新');
     } catch (error) {
@@ -2595,7 +2586,8 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
       const data = await res.json();
       if (!data.success) throw new Error(data.message || '密码修改失败');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setMessage('密码已更新');
+      alert('密码已更新，请重新登录');
+      onLogout();
     } catch (error) {
       setMessage(error.message || '密码修改失败');
     } finally {
@@ -2660,7 +2652,7 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回 SIEHUB</button>
       <section className="siehub-my-hero">
-        <span className="siehub-avatar siehub-my-avatar">{user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : firstChar(user?.name)}</span>
+        <span className="siehub-avatar siehub-my-avatar">{user?.avatarUrl ? <img src={resolveMediaUrl(user.avatarUrl)} alt="" /> : firstChar(user?.name)}</span>
         <div><p>ACCOUNT SETTINGS</p><h1>账号设置</h1><span>{user?.identityLabel || '学生账号'} · {user?.studentId}</span></div>
         <label className="siehub-avatar-upload"><ImagePlus /><span>更换头像</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadAvatar} /></label>
       </section>
@@ -2669,8 +2661,13 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
         <form className="siehub-my-card" onSubmit={saveProfile}>
           <div className="siehub-my-card-head"><IdCard /><div><h2>账号信息</h2><p>更新姓名、邮箱、手机号等基础信息。</p></div></div>
           <label><span>姓名</span><input value={profile.name} onChange={event => setProfile({ ...profile, name: event.target.value })} required /></label>
-          <label><span>学号</span><input value={profile.studentId} onChange={event => setProfile({ ...profile, studentId: event.target.value })} required /></label>
+          <label><span>学号</span><input value={profile.studentId} readOnly /></label>
           <label><span>邮箱</span><input type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} required /></label>
+          {emailChanged && <>
+            <label><span>当前密码（验证邮箱变更）</span><input type="password" required value={emailVerification.currentPassword} onChange={event => setEmailVerification({ ...emailVerification, currentPassword: event.target.value })} /></label>
+            <label><span>新邮箱验证码</span><input inputMode="numeric" required maxLength={6} value={emailVerification.emailCode} onChange={event => setEmailVerification({ ...emailVerification, emailCode: event.target.value.replace(/\D/g, '').slice(0, 6) })} /></label>
+            <button type="button" disabled={emailSending || saving} onClick={sendProfileEmailCode}>{emailSending ? '发送中' : '发送新邮箱验证码'}</button>
+          </>}
           <label><span>手机号</span><input value={profile.phone} onChange={event => setProfile({ ...profile, phone: event.target.value })} /></label>
           <button className="primary-button" type="submit" disabled={saving}>保存信息</button>
         </form>
@@ -2775,7 +2772,10 @@ const emptyNoticeDraft = {
   body: { zh: '', en: '' },
   coverImageUrl: '',
   sourceUrl: '',
-  status: 'draft'
+  status: 'draft',
+  publishedAt: '',
+  heroEnabled: false,
+  heroOrder: 0
 };
 
 const cloneNoticeDraft = (notice = emptyNoticeDraft) => ({
@@ -2784,7 +2784,10 @@ const cloneNoticeDraft = (notice = emptyNoticeDraft) => ({
   body: { zh: notice.body?.zh || '', en: notice.body?.en || '' },
   coverImageUrl: notice.coverImageUrl || '',
   sourceUrl: notice.sourceUrl || '',
-  status: notice.status || 'draft'
+  status: notice.status || 'draft',
+  publishedAt: notice.publishedAt || '',
+  heroEnabled: Boolean(notice.heroEnabled),
+  heroOrder: Number(notice.heroOrder || 0)
 });
 
 const localizedFieldPatch = (draft, field, languageKey, value) => ({
@@ -3221,6 +3224,62 @@ const HubNoticeCenter = ({ token, language = 'zh', fixedModule = null }) => {
   );
 };
 
+const DepartmentHeroPortal = ({ module, token, language = 'zh' }) => {
+  const [data, setData] = useState({ hero: [], news: [], notices: [] });
+  const [selected, setSelected] = useState(null);
+  const [slideIndex, setSlideIndex] = useState(0);
+  useEffect(() => {
+    if (!module?.organization || !module?.key || !token) return undefined;
+    const controller = new AbortController();
+    fetch(`${API_BASE}/hub/hero?organization=${module.organization}&department=${module.key}`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: controller.signal
+    }).then(res => res.json()).then(result => {
+      if (!controller.signal.aborted && result.success) setData({ hero: result.hero || [], news: result.news || [], notices: result.notices || [] });
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [module?.organization, module?.key, token]);
+  const lead = data.hero.length ? data.hero[slideIndex % data.hero.length] : null;
+  useEffect(() => {
+    if (data.hero.length <= 1) return undefined;
+    const timer = setInterval(() => setSlideIndex(index => (index + 1) % data.hero.length), 5200);
+    return () => clearInterval(timer);
+  }, [data.hero.length]);
+  if (selected) return <NoticeDetailPage notice={selected} language={language} onBack={() => setSelected(null)} />;
+  return <section className="siehub-department-news-hero">
+    <div className="siehub-department-news-head"><div><p>SIEHUB / DEPARTMENT HERO</p><h2>{module?.title}新闻与消息</h2></div><span>{data.hero.length} HERO</span></div>
+    {lead ? <>
+      <button className="siehub-department-news-feature" type="button" onClick={() => setSelected(lead)}>
+      {lead.coverImageUrl ? <img src={lead.coverImageUrl} alt="" /> : <span className="siehub-news-cover-fallback">SIE</span>}
+      <span><small>{formatNoticeDate(lead.publishedAt, language)}</small><strong>{pickLocalizedNoticeText(lead.title, language)}</strong><em>{pickLocalizedNoticeText(lead.summary, language)}</em></span>
+      </button>
+      {data.hero.length > 1 && <div className="siehub-department-news-dots">{data.hero.map((item, index) => <button key={noticeIdentity(item)} className={index === slideIndex % data.hero.length ? 'is-active' : ''} type="button" onClick={() => setSlideIndex(index)} aria-label={`第${index + 1}条 Hero`} />)}</div>}
+    </> : <p className="siehub-empty-text">暂无加入 Hero 的新闻动态。</p>}
+    <div className="siehub-department-news-columns"><section><div className="siehub-school-panel-title"><span>NEWS</span><h3>新闻动态</h3></div><div className="siehub-department-news-list">{data.news.slice(0, 6).map(news => <button key={noticeIdentity(news)} type="button" onClick={() => setSelected(news)}><span>{formatNoticeDate(news.publishedAt, language)}</span><strong>{pickLocalizedNoticeText(news.title, language)}</strong><ArrowUpRight /></button>)}</div></section><section><div className="siehub-school-panel-title"><span>NOTICE</span><h3>消息通知</h3></div><div className="siehub-department-news-list">{data.notices.slice(0, 6).map(notice => <button key={noticeIdentity(notice)} type="button" onClick={() => setSelected(notice)}><span>{formatNoticeDate(notice.publishedAt, language)}</span><strong>{pickLocalizedNoticeText(notice.title, language)}</strong></button>)}</div></section></div>
+  </section>;
+};
+
+const HeroNewsManagement = ({ token }) => {
+  const [notices, setNotices] = useState([]);
+  const [message, setMessage] = useState('');
+  const departments = useMemo(() => SIEHUB_MODULES.filter(item => item.organization !== 'hub').map(item => ({ organization: item.organization, department: item.key, label: item.title })).concat([{ organization: 'student_union', department: 'default', label: '默认' }]), []);
+  const load = useCallback(async () => {
+    const res = await fetch(`${API_BASE}/hub/admin/news?limit=all`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || '加载新闻失败');
+    setNotices(data.notices || []);
+  }, [token]);
+  useEffect(() => { load().catch(error => setMessage(error.message)); }, [load]);
+  const update = async (notice, patch) => {
+    setMessage('');
+    const res = await fetch(`${API_BASE}/hub/admin/news/${notice.id || notice._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(patch) });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || '保存失败');
+    setNotices(items => items.map(item => (item.id === notice.id ? data.notice : item)));
+    setMessage('新闻已保存，Hero 与部门页面已同步更新');
+  };
+  return <section className="siehub-hero-news-management"><div className="siehub-workspace-title"><div><p>ULTIMATE ADMIN / NEWS &amp; HERO</p><h2>Hero 页面与新闻动态管理</h2></div><button type="button" onClick={() => load().then(() => setMessage('新闻列表已刷新')).catch(error => setMessage(error.message))}>刷新</button></div>{message && <p className="siehub-form-message">{message}</p>}<div className="siehub-hero-news-table">{notices.map(notice => { const department = departments.find(item => item.organization === notice.organization && item.department === notice.department); return <article key={notice.id || notice._id}><div>{notice.coverImageUrl ? <img src={notice.coverImageUrl} alt="" /> : <span className="siehub-news-cover-fallback">SIE</span>}</div><label>标题<input value={notice.title?.zh || ''} onChange={event => setNotices(items => items.map(item => item.id === notice.id ? { ...item, title: { ...item.title, zh: event.target.value } } : item))} /></label><label>时间<input type="datetime-local" value={notice.publishedAt ? new Date(notice.publishedAt).toISOString().slice(0, 16) : ''} onChange={event => setNotices(items => items.map(item => item.id === notice.id ? { ...item, publishedAt: event.target.value } : item))} /></label><label>归属<select value={`${notice.organization}:${notice.department}`} onChange={event => { const [organization, department] = event.target.value.split(':'); setNotices(items => items.map(item => item.id === notice.id ? { ...item, organization, department } : item)); }}>{departments.map(item => <option key={`${item.organization}:${item.department}`} value={`${item.organization}:${item.department}`}>{item.label}</option>)}</select></label><label className="siehub-hero-toggle"><input type="checkbox" checked={Boolean(notice.heroEnabled)} onChange={event => setNotices(items => items.map(item => item.id === notice.id ? { ...item, heroEnabled: event.target.checked } : item))} />加入 Hero</label><button type="button" onClick={() => update(notice, { title: notice.title, publishedAt: notice.publishedAt, organization: notice.organization, department: notice.department, heroEnabled: notice.heroEnabled, heroOrder: notice.heroOrder }).catch(error => setMessage(error.message))}>保存</button></article>; })}</div></section>;
+};
+
 const DepartmentNoticeWorkspace = ({ module, token, language = 'zh', onClose }) => {
   const [status, setStatus] = useState('draft');
   const [notices, setNotices] = useState([]);
@@ -3387,6 +3446,9 @@ const DepartmentNoticeWorkspace = ({ module, token, language = 'zh', onClose }) 
               </div>
             </div>
             <label><span>原文链接</span><input value={draft.sourceUrl} onChange={event => setDraft(current => ({ ...current, sourceUrl: event.target.value }))} placeholder="https://..." /></label>
+            <label><span>发布时间</span><input type="datetime-local" value={draft.publishedAt ? new Date(draft.publishedAt).toISOString().slice(0, 16) : ''} onChange={event => setDraft(current => ({ ...current, publishedAt: event.target.value }))} /></label>
+            <label><span>Hero 排序</span><input type="number" value={draft.heroOrder} onChange={event => setDraft(current => ({ ...current, heroOrder: Number(event.target.value || 0) }))} /></label>
+            <label className="siehub-hero-toggle"><input type="checkbox" checked={draft.heroEnabled} onChange={event => setDraft(current => ({ ...current, heroEnabled: event.target.checked }))} /><span>加入本部门 Hero 页面</span></label>
           </div>
           <label className="siehub-notice-body"><span>中文正文</span><textarea value={draft.body.zh} onChange={event => setDraft(current => localizedFieldPatch(current, 'body', 'zh', event.target.value))} rows={7} /></label>
           <label className="siehub-notice-body"><span>English Body</span><textarea value={draft.body.en} onChange={event => setDraft(current => localizedFieldPatch(current, 'body', 'en', event.target.value))} rows={5} /></label>
@@ -3716,10 +3778,15 @@ const SIEHUBHomeNotificationCenter = ({ token, onOpenSIEVOX }) => {
     return () => clearInterval(timer);
   }, [fetchNotifications]);
 
-  const openNotification = (notification) => {
-    markNotificationsRead([notification._id]);
-    setOpen(false);
-    onOpenSIEVOX?.();
+  const openNotification = async (notification) => {
+    const targetId = notification.feedbackId?._id || notification.feedbackId;
+    if (!targetId) return;
+    try {
+      const data = await requestJson(`/feedback/${targetId}`, token);
+      onOpenSIEVOX?.({ feedback: data.feedback, notification });
+      setOpen(false);
+      await markNotificationsRead([notification._id]);
+    } catch (error) { alert(error.message || '事项暂时无法打开'); }
   };
 
   return (
@@ -3740,7 +3807,7 @@ const SIEHUBHomeNotificationCenter = ({ token, onOpenSIEVOX }) => {
   );
 };
 
-const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpenSIEVOX, onOpenSIEBridge, onOpenMy, onLogout, language = 'zh', languageSwitcher = null }) => {
+const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpenSIEVOX, onOpenSIEBridge, onOpenUltimate, onOpenMy, onLogout, language = 'zh', languageSwitcher = null }) => {
   const modules = getAccessibleModules(user);
   const clock = usePlatformClock(language);
   const serviceMetrics = useServiceMetrics(token);
@@ -3808,7 +3875,7 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
   return <main className="siehub-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>SIE LIFE PLATFORM</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} />{user?.isUltimateAdmin && <button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} />{user?.isUltimateAdmin && <><button className="siehub-topbar-link" type="button" onClick={onOpenUltimate}><ShieldCheck />Hero与新闻管理</button><button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button></>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
     </header>
     <div className="siehub-content">
       <section className="siehub-hero">
@@ -3913,14 +3980,38 @@ const SIEHUBDepartmentDirectory = ({ user, theme, onBack, onOpenModule, onOpenMy
   </main>;
 };
 
-const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token, user, language = 'zh' }) => {
+const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token, user, language = 'zh', initialPerformanceOpen = false }) => {
   const [introductionOpen, setIntroductionOpen] = useState(false);
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [performanceOpen, setPerformanceOpen] = useState(initialPerformanceOpen);
+  const [performanceSection, setPerformanceSection] = useState('overview');
+  const [performancePeriod, setPerformancePeriod] = useState('');
   const isSIEVOX = module?.key === 'student_rights';
   const isSIEBridge = module?.key === 'academic_technology';
   const isCultureSportsArts = module?.key === 'culture_sports_arts';
   const canViewFiles = canViewDepartmentFiles(user, module);
+  const performanceAccess = getModuleAccess(user, module);
+  const canEnterPerformance = Boolean(user?.isUltimateAdmin || ['member', 'manage', 'ultimate'].includes(performanceAccess?.accessLevel));
+  useEffect(() => { setPerformancePeriod(''); setPerformanceSection('overview'); }, [module?.key]);
+
+  if (performanceOpen) {
+    return (
+      <>
+        <button className="siehub-back" type="button" onClick={() => setPerformanceOpen(false)}>
+          <ChevronLeft />
+          返回学生服务入口
+        </button>
+        {isCultureSportsArts && <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
+          <button type="button" className={performanceSection === 'overview' ? 'is-active' : ''} onClick={() => setPerformanceSection('overview')}>我的成绩与评价</button>
+          <button type="button" className={performanceSection === 'rubric' ? 'is-active' : ''} onClick={() => setPerformanceSection('rubric')}>月度逐项评分</button>
+        </div>}
+        {performanceSection === 'overview' || !isCultureSportsArts
+          ? <DepartmentPerformanceParticipation module={module} token={token} user={user} compact period={performancePeriod} onPeriodChange={setPerformancePeriod} />
+          : <CultureSportsArtsPerformanceWorkspace period={performancePeriod} onPeriodChange={setPerformancePeriod} />}
+      </>
+    );
+  }
 
   if (introductionOpen) {
     return (
@@ -3966,6 +4057,7 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
           <h2>{module?.title}学生端</h2>
           <span>这里面向所有学生开放，用于查看部门服务说明、活动入口和后续上线的学生侧功能。</span>
         </div>
+        <DepartmentHeroPortal module={module} token={token} language={language} />
         <div className="siehub-student-service-grid">
           <DepartmentIntroductionEntryCard module={module} onOpen={() => setIntroductionOpen(true)} />
           {isSIEVOX ? (
@@ -3984,8 +4076,33 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
               <p>按专业与年级查找课程资料，上传真题、课件和笔记并查看审核进度。</p>
               <b>立即进入 <ArrowUpRight /></b>
             </button>
+          ) : isCultureSportsArts && canEnterPerformance ? (
+            <button className="siehub-student-service-entry" type="button" onClick={() => setPerformanceOpen(true)}>
+              <span>02</span>
+              <Trophy />
+              <strong>多源绩效评价</strong>
+              <p>进入文体艺术部绩效平台，完成自评、互评和负责人评议。</p>
+              <b>立即进入 <ArrowUpRight /></b>
+            </button>
+          ) : canEnterPerformance ? (
+            <button className="siehub-student-service-entry" type="button" onClick={() => setPerformanceOpen(true)}>
+              <span>02</span>
+              <Trophy />
+              <strong>我的绩效与评价</strong>
+              <p>查看本人学期积分，完成自评、互评和职责范围内的评价。</p>
+              <b>进入考核 <ArrowUpRight /></b>
+            </button>
           ) : (
             <article><span>02</span><strong>学生服务入口</strong><p>该部门学生侧服务后续将在 SIEHUB 内逐步上线。</p></article>
+          )}
+          {(isSIEVOX || isSIEBridge) && canEnterPerformance && (
+            <button className="siehub-student-service-entry" type="button" onClick={() => setPerformanceOpen(true)}>
+              <span>05</span>
+              <Trophy />
+              <strong>我的绩效与评价</strong>
+              <p>查看本人学期积分，完成自评、互评和职责范围内的评价。</p>
+              <b>进入考核 <ArrowUpRight /></b>
+            </button>
           )}
           <button className="siehub-student-service-entry" type="button" onClick={() => setNoticesOpen(true)}>
             <span>03</span>
@@ -4009,7 +4126,17 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
   );
 };
 
-const CultureSportsArtsPerformanceWorkspace = () => (
+const CultureSportsArtsPerformanceWorkspace = ({ period = '', onPeriodChange }) => {
+  const frameRef = useRef(null);
+  useEffect(() => {
+    const handlePeriod = event => {
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || event.data?.type !== 'culture-performance-period') return;
+      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.data.month)) onPeriodChange?.(event.data.month);
+    };
+    window.addEventListener('message', handlePeriod);
+    return () => window.removeEventListener('message', handlePeriod);
+  }, [onPeriodChange]);
+  return (
   <section className="siehub-special-performance-card">
     <div className="siehub-special-performance-head">
       <div>
@@ -4020,15 +4147,17 @@ const CultureSportsArtsPerformanceWorkspace = () => (
       <button type="button" onClick={() => window.open(CULTURE_SPORTS_ARTS_PERFORMANCE_URL, '_blank', 'noopener,noreferrer')}>新窗口打开</button>
     </div>
     <iframe
+      ref={frameRef}
       className="siehub-special-performance-frame"
-      src={CULTURE_SPORTS_ARTS_PERFORMANCE_URL}
+      src={`${CULTURE_SPORTS_ARTS_PERFORMANCE_URL}?unified=1${period ? `&month=${encodeURIComponent(period)}` : ''}`}
       title="文体艺术部考核绩效平台"
       loading="lazy"
     />
   </section>
-);
+  );
+};
 
-const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVOX, onOpenSIEBridge, onOpenMy, onLogout, languageSwitcher = null, language = 'zh' }) => {
+const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVOX, onOpenSIEBridge, onOpenMy, onLogout, initialWorkspace = '', languageSwitcher = null, language = 'zh' }) => {
   const [performancePolicy, setPerformancePolicy] = useState(null);
   const [policyAccess, setPolicyAccess] = useState(null);
   const [policyLoading, setPolicyLoading] = useState(false);
@@ -4036,7 +4165,9 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
   const [policyMessage, setPolicyMessage] = useState('');
   const canSwitchPortal = canSwitchDepartmentPortal(user, module);
   const [departmentPortal, setDepartmentPortal] = useState(canSwitchPortal ? 'manage' : 'student');
-  const [manageWorkspace, setManageWorkspace] = useState('introduction');
+  const [manageWorkspace, setManageWorkspace] = useState(initialWorkspace || 'introduction');
+  const [performanceSection, setPerformanceSection] = useState('overview');
+  const [performancePeriod, setPerformancePeriod] = useState('');
   const fallbackCanManagePerformance = canManageVolunteerPolicy(user, module);
   const canManageNotice = canManageDepartmentNotice(user, module);
   const canManageMembers = canManageDepartmentMembers(user, module);
@@ -4044,6 +4175,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
   const canViewFiles = canViewDepartmentFiles(user, module);
   const canManageFiles = canManageDepartmentFiles(user, module);
   const canManagePerformance = policyAccess?.canEdit ?? fallbackCanManagePerformance;
+  const canManagePerformanceRecords = Boolean(user?.isUltimateAdmin || getModuleAccess(user, module)?.capabilities?.includes('manage_department_performance'));
   const canEnterSIEVOX = module?.key === 'student_rights' || user?.isUltimateAdmin;
   const isSIEBridge = module?.key === 'academic_technology';
   const isCultureSportsArts = module?.key === 'culture_sports_arts';
@@ -4053,8 +4185,10 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
 
   useEffect(() => {
     setDepartmentPortal(canSwitchPortal ? 'manage' : 'student');
-    setManageWorkspace(hideIntroductionWorkspace ? 'notice' : 'introduction');
-  }, [canSwitchPortal, module?.key, hideIntroductionWorkspace]);
+    setManageWorkspace(initialWorkspace || (hideIntroductionWorkspace ? 'notice' : 'introduction'));
+    setPerformancePeriod('');
+    setPerformanceSection('overview');
+  }, [canSwitchPortal, module?.key, hideIntroductionWorkspace, initialWorkspace]);
 
   useEffect(() => {
     if (!module?.organization || !module?.key || !token) {
@@ -4190,9 +4324,15 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
       ) : manageWorkspace === 'files' ? (
         <DepartmentFileWorkspace module={module} token={token} canView={canViewFiles} canManage={canManageFiles} />
       ) : manageWorkspace === 'performance' ? (
-        isCultureSportsArts ? <CultureSportsArtsPerformanceWorkspace /> : (
-          <>
-            <DepartmentPerformancePolicyCard
+        <>
+          <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
+            <button type="button" className={performanceSection === 'overview' ? 'is-active' : ''} onClick={() => setPerformanceSection('overview')}>成绩与评价</button>
+            <button type="button" className={performanceSection === 'records' ? 'is-active' : ''} onClick={() => setPerformanceSection('records')}>{isCultureSportsArts ? '月度逐项评分' : '日常积分'}</button>
+            {!isCultureSportsArts && <button type="button" className={performanceSection === 'policy' ? 'is-active' : ''} onClick={() => setPerformanceSection('policy')}>考核制度</button>}
+          </div>
+          {performanceSection === 'overview' ? <DepartmentPerformanceParticipation module={module} token={token} user={user} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
+            : performanceSection === 'records' ? (isCultureSportsArts ? <CultureSportsArtsPerformanceWorkspace period={performancePeriod} onPeriodChange={setPerformancePeriod} /> : <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformanceRecords} period={performancePeriod} onPeriodChange={setPerformancePeriod} />)
+              : !isCultureSportsArts && <DepartmentPerformancePolicyCard
               module={module}
               policy={performancePolicy}
               canEdit={canManagePerformance}
@@ -4201,10 +4341,8 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
               message={policyMessage}
               onSave={savePerformancePolicy}
               onReset={resetPerformancePolicy}
-            />
-            <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformance} />
-          </>
-        )
+            />}
+        </>
       ) : (
         <>
           <div className="siehub-framework-grid">
@@ -4220,7 +4358,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
             {isSIEBridge ? (
               <section><span>03</span><h2>SIEBridge 审核</h2><p>课程新增与资料上传申请在此集中审核，通过后展示到学生端。</p><button type="button" disabled>已接入</button></section>
             ) : (
-              <section><span>03</span><h2>志愿者绩效制度</h2><p>{canManagePerformance ? '部门负责人及以上成员后续可在此调整规则细项；当前先沿用 SIEVOX 同款六维模板。' : '当前先统一沿用 SIEVOX 同款六维模板。'}</p><button type="button" disabled>{canManagePerformance ? '模板已同步' : '只读模板'}</button></section>
+              <section><span>03</span><h2>绩效考核</h2><p>日常积分、本人评价和部门制度集中在绩效工作区。</p><button type="button" onClick={() => setManageWorkspace('performance')}>进入绩效</button></section>
             )}
             <section><span>04</span><h2>成员与归档</h2><p>届次成员、身份标签、分管关系与绩效档案将归入统一组织框架。</p><button type="button" disabled>规划中</button></section>
             <section><span>05</span><h2>部门资料库</h2><p>部门负责人、团委学生兼职团干部和分管主席层级可维护资料；志愿者可在学生端查看下载。</p><button type="button" disabled={!canViewFiles} onClick={() => setManageWorkspace('files')}>{canManageFiles ? '进入资料库' : canViewFiles ? '查看资料' : '未开放'}</button></section>
@@ -4231,21 +4369,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
               <div><strong>SIEBridge 已作为独立业务页面运行</strong><span>课程检索、资料上传、提交记录和审核管理统一进入 SIEBridge 页面完成。</span></div>
               <button className="primary-button" type="button" onClick={onOpenSIEBridge}>进入 SIEBridge <ArrowUpRight /></button>
             </section>
-          ) : (
-            <>
-              <DepartmentPerformancePolicyCard
-                module={module}
-                policy={performancePolicy}
-                canEdit={canManagePerformance}
-                loading={policyLoading}
-                saving={policySaving}
-                message={policyMessage}
-                onSave={savePerformancePolicy}
-                onReset={resetPerformancePolicy}
-              />
-              <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformance} />
-            </>
-          )}
+          ) : null}
           {!isSIEBridge && (canEnterSIEVOX ? (
             <section className="siehub-bridge-card"><img className="siehub-bridge-logo" src={sieLogo} alt="SIEVOX" /><div><strong>学生权益部已具备独立业务平台</strong><span>SIEVOX 保持现有反馈、账号、绩效与组织管理功能，继续作为学生权益部的成熟子模块运行。</span></div><button className="primary-button" type="button" onClick={onOpenSIEVOX}>进入 SIEVOX <ArrowUpRight /></button></section>
           ) : (
@@ -4253,7 +4377,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
           ))}
         </>
       )) : (
-        <DepartmentStudentPortal module={module} onOpenSIEVOX={onOpenSIEVOX} onOpenSIEBridge={onOpenSIEBridge} token={token} user={user} language={language} />
+        <DepartmentStudentPortal module={module} onOpenSIEVOX={onOpenSIEVOX} onOpenSIEBridge={onOpenSIEBridge} token={token} user={user} language={language} initialPerformanceOpen={initialWorkspace === 'performance'} />
       )}
     </div>
     <SIEHUBMobileDock active="home" onHome={onBack} onMy={onOpenMy} />
@@ -4263,6 +4387,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
 
 const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLogout, languageSwitcher = null }) => {
   const allowed = Boolean(user?.isUltimateAdmin);
+  const [workspace, setWorkspace] = useState('news');
 
   return <main className="siehub-shell siehub-ultimate-window admin-demo-shell">
     <header className="siehub-topbar">
@@ -4280,9 +4405,10 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
         </div>
       </section>
       {allowed ? (
-        <section className="siehub-organization-host">
-          <OrganizationFrameworkPanel token={token} />
-        </section>
+        <>
+          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={workspace === 'organization' ? 'is-active' : ''} onClick={() => setWorkspace('organization')}>组织架构</button><button type="button" className={workspace === 'news' ? 'is-active' : ''} onClick={() => setWorkspace('news')}>Hero与新闻</button></div>
+          <section className="siehub-organization-host">{workspace === 'news' ? <HeroNewsManagement token={token} /> : <OrganizationFrameworkPanel token={token} />}</section>
+        </>
       ) : (
         <section className="siehub-access-denied">
           <LockKeyhole />
@@ -4336,7 +4462,7 @@ const HubInlineReturnButton = ({ onClick }) => (
   </button>
 );
 
-const Sidebar = ({ user, activePage, setActivePage, openCompose, serviceMetrics, language = 'zh' }) => (
+const Sidebar = ({ user, activePage, setActivePage, openCompose, onOpenManage, serviceMetrics, language = 'zh' }) => (
   <aside className="sidebar" aria-label="主导航">
     <div className="brand-lockup"><img src={sieLogo} alt="SIEVOX" /><div><strong>SIEVOX</strong><span>学生权益反馈系统</span></div></div>
     <nav className="side-nav">
@@ -4345,11 +4471,12 @@ const Sidebar = ({ user, activePage, setActivePage, openCompose, serviceMetrics,
       <button className="nav-item" type="button" onClick={() => openCompose()}><SquarePen /><span>发起反馈</span><kbd>N</kbd></button>
       <button className={cls('nav-item', activePage === 'feedbacks' && 'is-active')} type="button" onClick={() => setActivePage('feedbacks')}><MessagesSquare /><span>我的反馈</span><span className="nav-count">●</span></button>
       <button className={cls('nav-item', activePage === 'guide' && 'is-active')} type="button" onClick={() => setActivePage('guide')}><BookOpen /><span>服务指南</span></button>
+      {onOpenManage && <><p className="nav-label">职责范围</p><button className="nav-item" type="button" onClick={onOpenManage}><LayoutDashboard /><span>反馈处理台</span></button></>}
     </nav>
     <ServiceHealthNote metrics={serviceMetrics.metrics} loading={serviceMetrics.loading} error={serviceMetrics.error} language={language} />
     <div className="sidebar-user">
       <span className="avatar">{firstChar(user?.name)}</span>
-      <div><strong>{user?.name}</strong><span>{user?.studentId}</span></div>
+      <div><strong>{user?.name}</strong><span>{user?.identityLabel || (user?.isUltimateAdmin ? '终极管理员' : user?.studentId)}</span></div>
     </div>
   </aside>
 );
@@ -4358,11 +4485,11 @@ const Topbar = ({ pageTitle, theme, notifications, unreadCount = 0, onToggleNoti
   <header className="topbar">
     <div className="breadcrumb"><span>国际教育学院</span><ChevronRight /><strong id="page-title">{pageTitle}</strong></div>
     <div className="topbar-actions">
-      {user?.isUltimateAdmin && (
+      {getSievoxPortalRole(user) !== 'student' && (
         <div className="role-switch" aria-label="当前身份">
-          <button className={portalView === 'student' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('student')}>学生端</button>
-          <button className={portalView === 'admin' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('admin')}>管理端</button>
-          <button className={portalView === 'superadmin' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('superadmin')}>超级管理员</button>
+          <button className={portalView === 'student' ? 'is-active' : ''} type="button" onClick={() => onPortalChange?.('student')}>本人反馈</button>
+          <button type="button" onClick={() => onPortalChange?.(user?.isUltimateAdmin ? 'admin' : defaultSievoxPortalView(user))}>反馈处理台</button>
+          {user?.isUltimateAdmin && <button type="button" onClick={() => onPortalChange?.('superadmin')}>终极管理</button>}
         </div>
       )}
       {onBackToHub && <HubInlineReturnButton onClick={onBackToHub} />}
@@ -4404,10 +4531,7 @@ const NotificationDrawer = ({ open, notifications = [], unreadCount = 0, onClose
                 key={item._id}
                 type="button"
                 className={cls('notification-item', unread && 'is-unread')}
-                onClick={() => {
-                  onMarkReadOne?.(item);
-                  onOpenNotification?.(item);
-                }}
+                onClick={() => onOpenNotification ? onOpenNotification(item) : onMarkReadOne?.(item)}
               >
                 <div>
                   <strong>{item.type === 'new_message' ? '新留言' : item.type === 'new_feedback' ? '新反馈' : '系统通知'}</strong>
@@ -4437,7 +4561,7 @@ const CategoryIcon = ({ category }) => {
 
 const StatsStrip = ({ stats }) => (
   <div className="stats-strip" aria-label="反馈统计">
-    <div><span>本学期反馈</span><strong>{String(stats.total || 0).padStart(2, '0')}</strong><small>持续记录</small></div>
+    <div><span>累计反馈</span><strong>{String(stats.total || 0).padStart(2, '0')}</strong><small>持续记录</small></div>
     <div><span>处理中</span><strong className="text-blue">{String(stats.processing || 0).padStart(2, '0')}</strong><small>等待部门更新</small></div>
     <div><span>已解决</span><strong className="text-green">{String(stats.resolved || 0).padStart(2, '0')}</strong><small>解决率提升中</small></div>
     <div><span>待受理</span><strong>{String(stats.pending || 0).padStart(2, '0')}</strong><small>进入受理队列</small></div>
@@ -4501,22 +4625,21 @@ const ActiveCase = ({ feedback, onOpen }) => {
   );
 };
 
-const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit, loading }) => {
-  const [subCategory, setSubCategory] = useState('');
-  const [form, setForm] = useState({ title: '', content: '', priority: 'normal', isAnonymous: false });
-  const [files, setFiles] = useState([]);
+const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit, loading, draft, setDraft, onSaveDraft, draftMessage }) => {
+  const { subCategory, files } = draft;
+  const form = draft;
+  const setForm = next => setDraft(current => ({ ...current, ...next }));
+  const setFiles = files => setDraft(current => ({ ...current, files }));
+  const setSubCategory = subCategory => setDraft(current => ({ ...current, subCategory }));
   const activeCategory = category || '';
   const catMeta = activeCategory ? getCategory(activeCategory) : null;
 
-  useEffect(() => { if (category) setSubCategory(''); }, [category]);
-
   const submit = () => {
     if (!activeCategory || !subCategory || !form.title || !form.content) return alert('请完整填写问题领域、细分类别、标题和描述');
-    onSubmit({ ...form, category: activeCategory, subCategory }, files).then(ok => {
+    const { files: draftFiles, ...payload } = form;
+    onSubmit({ ...payload, category: activeCategory, subCategory }, draftFiles).then(ok => {
       if (ok) {
-        setForm({ title: '', content: '', priority: 'normal', isAnonymous: false });
-        setFiles([]);
-        setSubCategory('');
+        setDraft(emptyFeedbackDraft());
       }
     });
   };
@@ -4528,11 +4651,14 @@ const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit,
         <header><div><span>STEP 1 OF 3</span><h2>告诉我们发生了什么</h2></div><button className="icon-button" type="button" onClick={onClose}><X /></button></header>
         <div className="sheet-body">
           <label>问题领域</label>
-          <button className="mobile-select" type="button"><span>{catMeta?.label || '请选择问题领域'}</span><ChevronRight /></button>
+          <select className="mobile-select" value={activeCategory} onChange={e => setCategory(e.target.value)}><option value="">请选择问题领域</option>{Object.entries(CATEGORIES_CONFIG).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}</select>
           <label>细分类别</label>
           <select value={subCategory} onChange={e => setSubCategory(e.target.value)}><option value="">请选择细分类别</option>{catMeta?.sub.map(item => <option key={item}>{item}</option>)}</select>
-          <label>问题标题</label><input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="用一句话概括问题" />
-          <label>详细描述</label><textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="时间、地点、具体情况…" />
+          <label>问题标题</label><input maxLength="50" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="用一句话概括问题" />
+          <label>详细描述</label><textarea maxLength="500" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="时间、地点、具体情况…" />
+          {files.length > 0 && <p>已选择 {files.length} 个附件</p>}
+          {draftMessage && <p role="status">{draftMessage}</p>}
+          <button className="text-button" type="button" onClick={onSaveDraft} disabled={loading}>暂存草稿（含附件）</button>
           <div className="sheet-actions">
             <label className="sheet-attach"><Paperclip /><input hidden type="file" multiple onChange={e => setFiles(Array.from(e.target.files || []))} /></label>
             <label className="mobile-anonymous"><input type="checkbox" checked={form.isAnonymous} onChange={e => setForm({ ...form, isAnonymous: e.target.checked })} /><i></i><span>匿名</span></label>
@@ -4561,19 +4687,24 @@ const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit,
           <label><span><strong>匿名提交</strong><small>处理部门不可见你的身份</small></span><input className="switch-input" type="checkbox" checked={form.isAnonymous} onChange={e => setForm({ ...form, isAnonymous: e.target.checked })} /><i></i></label>
         </div>
       </div>
-      <footer><button className="text-button" type="button" onClick={onClose}>暂存草稿</button><button className="primary-button" type="button" onClick={submit} disabled={loading}>确认并提交<Send /></button></footer>
+      {draftMessage && <p role="status">{draftMessage}</p>}
+      <footer><button className="text-button" type="button" onClick={onSaveDraft} disabled={loading}>暂存草稿（含附件）</button><button className="primary-button" type="button" onClick={submit} disabled={loading}>确认并提交<Send /></button></footer>
     </aside>
   );
 };
 
 const FeedbackDialog = ({ feedback, onClose, onReply, onRecall, onDelete }) => {
   const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  useEffect(() => setReply(''), [feedback?._id]);
   if (!feedback) return null;
   const status = STATUS_META[feedback.status] || STATUS_META.pending;
   const submitReply = async () => {
     if (!reply.trim()) return;
-    await onReply(feedback._id, reply);
-    setReply('');
+    if (sending) return;
+    setSending(true);
+    try { if (await onReply(feedback._id, reply)) setReply(''); }
+    finally { setSending(false); }
   };
   return (
     <div className="dialog-backdrop">
@@ -4586,17 +4717,17 @@ const FeedbackDialog = ({ feedback, onClose, onReply, onRecall, onDelete }) => {
         <ol className="dialog-timeline">
           <li className="done"><Check /><div><strong>提交成功</strong><small>{formatDate(feedback.createdAt)}</small></div></li>
           {(feedback.responses || []).map(resp => (
-            <li className="current" key={resp._id || resp.createdAt}><MessagesSquare /><div><strong>{resp.adminName || '处理老师'}回复</strong><small>{formatDate(resp.createdAt)}</small><p>{resp.isRecalled ? '该回复已被撤回' : resp.content}</p><AttachmentViewer attachments={resp.attachments} />{!resp.isRecalled && <button className="text-button" type="button" onClick={() => onRecall(feedback._id, resp._id)}>撤回留言</button>}</div></li>
+            <li className="current" key={resp._id || resp.createdAt}><MessagesSquare /><div><strong>{responseSenderLabel(resp)}</strong><small>{formatDate(resp.createdAt)}</small><p>{resp.isRecalled ? '该回复已被撤回' : resp.content}</p>{!resp.isRecalled && <AttachmentViewer attachments={resp.attachments} />}{!resp.isRecalled && resp.canRecall && <button className="text-button" type="button" onClick={() => onRecall(feedback._id, resp._id)}>撤回留言</button>}</div></li>
           ))}
         </ol>
-        <div className="dialog-reply"><input value={reply} onChange={e => setReply(e.target.value)} placeholder="补充信息或回复处理老师…" /><button type="button" onClick={submitReply}><Send /><span>发送</span></button></div>
+        <div className="dialog-reply"><input value={reply} onChange={e => setReply(e.target.value)} placeholder="补充信息或回复处理老师…" /><button type="button" disabled={sending} onClick={submitReply}><Send /><span>{sending ? '发送中' : '发送'}</span></button></div>
         {feedback.status === 'pending' && <button className="text-button danger-text" type="button" onClick={() => onDelete(feedback._id)}>撤销这条反馈</button>}
       </dialog>
     </div>
   );
 };
 
-const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, openCompose, onOpenFeedback, onDeleteFeedback, clock }) => {
+const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, openCompose, onOpenFeedback, onDeleteFeedback, clock, pagination, onPageChange, filter, onFilterChange, search, onSearchChange, listLoading }) => {
   const latest = feedbacks[0];
   const activeCase = feedbacks.find(item => item.status === 'processing') || latest;
   return (
@@ -4618,8 +4749,10 @@ const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, ope
 
       <div className={cls('page-panel simple-page', activePage === 'feedbacks' && 'is-active')}>
         <div className="page-heading"><div><p className="eyebrow">MY FEEDBACK</p><h1>我的反馈</h1><p>按状态查看提交记录、部门回复与处理结果。</p></div><button className="primary-button" type="button" onClick={() => openCompose()}><Plus />发起新反馈</button></div>
-        <div className="filter-row"><button className="filter-chip is-active">全部 {feedbacks.length}</button><button className="filter-chip">待受理 {stats.pending}</button><button className="filter-chip">处理中 {stats.processing}</button><button className="filter-chip">已解决 {stats.resolved}</button><span></span><label className="search-field"><MessagesSquare /><input placeholder="搜索标题或编号" /></label></div>
+        <div className="filter-row">{['', 'pending', 'processing', 'resolved', 'rejected'].map(status => <button key={status} type="button" className={cls('filter-chip', filter === status && 'is-active')} onClick={() => onFilterChange(status)}>{status ? STATUS_META[status].label : '全部'} {status ? stats[status] || 0 : stats.total}</button>)}<span></span><label className="search-field"><MessagesSquare /><input value={search} onChange={e => onSearchChange(e.target.value)} placeholder="搜索标题或内容" /></label></div>
+        {listLoading && <p role="status">正在加载…</p>}
         <div className="feedback-list full-list">{feedbacks.map(item => <FeedbackRow key={item._id} feedback={item} onOpen={onOpenFeedback} onDelete={onDeleteFeedback} />)}</div>
+        <FeedbackPagination pagination={pagination} onPageChange={onPageChange} loading={listLoading} />
       </div>
 
       <div className={cls('page-panel simple-page', activePage === 'guide' && 'is-active')}>
@@ -4637,30 +4770,39 @@ const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, ope
   );
 };
 
-const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpenFeedback, theme, clock, unreadCount = 0, onToggleNotifications, showNotifications = true, languageSwitcher = null }) => {
+const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpenFeedback, onOpenManage, theme, clock, unreadCount = 0, onToggleNotifications, showNotifications = true, languageSwitcher = null, pagination, onPageChange, filter, onFilterChange, search, onSearchChange, listLoading }) => {
   const latest = feedbacks.find(item => item.status === 'processing') || feedbacks[0];
   return (
     <div className="mobile-stage">
       <div className="mobile-shell">
         <header className="mobile-header">
           <div className="mobile-brand"><img src={sieLogo} alt="SIEVOX" /><div><strong>SIEVOX</strong><span>学生权益反馈</span></div></div>
-          <div className="mobile-header-actions"><span className="mobile-role-chip"><span>{user?.name}</span><RoleTag user={user} /></span><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button>{showNotifications && <button className="icon-button" type="button" onClick={onToggleNotifications} title="消息通知"><Bell />{unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>}{languageSwitcher}</div>
+          <div className="mobile-header-actions"><span className="mobile-role-chip"><span>{user?.name}</span><RoleTag user={user} /></span>{onOpenManage && <button className="icon-button" type="button" onClick={onOpenManage} title="反馈处理台" aria-label="反馈处理台"><LayoutDashboard /></button>}<button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button>{showNotifications && <button className="icon-button" type="button" onClick={onToggleNotifications} title="消息通知"><Bell />{unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>}{languageSwitcher}</div>
         </header>
         <main className="mobile-main">
           <section className={cls('mobile-page', page === 'home' && 'is-active')}>
             <div className="mobile-greeting"><p>{clock.greeting}，{user?.name}<span>{clock.timeLabel} {clock.timezoneLabel}</span></p><h1>今天想反馈什么？</h1></div>
             {latest && <button className="mobile-active-case" type="button" onClick={() => onOpenFeedback(latest)}><span className="case-state"><i></i>{STATUS_META[latest.status]?.label}</span><span className="case-code">#{latest._id?.slice(-6)?.toUpperCase()}</span><strong>{latest.title}</strong><p>{latest.responses?.length ? '已有部门回复' : '已进入处理队列'} · {formatDate(latest.updatedAt || latest.createdAt)}</p><span className="mobile-progress"><i></i></span><span className="progress-labels"><small>已提交</small><small>核实中</small><small>待完成</small></span></button>}
             <section className="mobile-section"><div className="mobile-section-head"><h2>快速反馈</h2><span>选择问题领域</span></div><div className="mobile-categories">{Object.entries(CATEGORIES_CONFIG).map(([key, cat]) => { const Icon = cat.icon; return <button key={key} type="button" onClick={() => openCompose(key, true)}><span className={cat.tileClass}><Icon /></span><small>{cat.short}</small></button>; })}</div></section>
-            <section className="mobile-section recent-mobile"><div className="mobile-section-head"><h2>最近反馈</h2><button type="button" onClick={() => setPage('feedbacks')}>全部 {feedbacks.length} 条<ChevronRight /></button></div>{feedbacks.slice(0, 2).map(item => <button key={item._id} className="mobile-feedback" type="button" onClick={() => onOpenFeedback(item)}><CategoryIcon category={item.category} /><span><strong>{item.title}</strong><small>{formatDate(item.createdAt)} · {getCategory(item.category).label}</small></span><StatusPill status={item.status} /></button>)}</section>
+            <section className="mobile-section recent-mobile"><div className="mobile-section-head"><h2>最近反馈</h2><button type="button" onClick={() => setPage('feedbacks')}>全部 {stats.total} 条<ChevronRight /></button></div>{feedbacks.slice(0, 2).map(item => <button key={item._id} className="mobile-feedback" type="button" onClick={() => onOpenFeedback(item)}><CategoryIcon category={item.category} /><span><strong>{item.title}</strong><small>{formatDate(item.createdAt)} · {getCategory(item.category).label}</small></span><StatusPill status={item.status} /></button>)}</section>
           </section>
           <section className={cls('mobile-page', page === 'feedbacks' && 'is-active')}>
             <div className="mobile-page-title"><button className="icon-button" type="button" onClick={() => setPage('home')}><ArrowLeft /></button><div><span>我的记录</span><h1>我的反馈</h1></div></div>
-            <div className="mobile-filter-scroll"><button className="is-active">全部 {feedbacks.length}</button><button>处理中 {stats.processing}</button><button>待受理 {stats.pending}</button><button>已解决 {stats.resolved}</button></div>
+            <div className="mobile-filter-scroll">{['', 'pending', 'processing', 'resolved', 'rejected'].map(status => <button key={status} type="button" className={filter === status ? 'is-active' : ''} onClick={() => onFilterChange(status)}>{status ? STATUS_META[status].label : '全部'} {status ? stats[status] || 0 : stats.total}</button>)}</div>
+            <label className="search-field"><MessagesSquare /><input value={search} onChange={e => onSearchChange(e.target.value)} placeholder="搜索标题或内容" /></label>
+            {listLoading && <p role="status">正在加载…</p>}
             <div className="mobile-history">{feedbacks.map(item => <button key={item._id} type="button" onClick={() => onOpenFeedback(item)}><span><StatusPill status={item.status} /><small>#{item._id?.slice(-6)?.toUpperCase()}</small></span><strong>{item.title}</strong><p>{item.responses?.[0]?.content || item.content}</p><time>更新于 {formatDate(item.updatedAt || item.createdAt)}</time></button>)}</div>
+            <FeedbackPagination pagination={pagination} onPageChange={onPageChange} loading={listLoading} />
           </section>
           <section className={cls('mobile-page', page === 'guide' && 'is-active')}>
             <div className="mobile-page-title"><div><span>帮助中心</span><h1>服务指南</h1></div></div>
-            <div className="mobile-guide"><button><Route /><span><strong>反馈如何流转</strong><small>受理、分派、回复与归档</small></span><ChevronRight /></button><button><Clock3 /><span><strong>处理需要多久</strong><small>普通事项 1 个工作日内响应</small></span><ChevronRight /></button><button><PhoneCall /><span><strong>紧急情况处理</strong><small>先联系线下应急渠道</small></span><ChevronRight /></button><button><ShieldCheck /><span><strong>材料与隐私</strong><small>附件支持佐证，匿名保护身份</small></span><ChevronRight /></button><button><MessageCircleMore /><span><strong>补充与撤回</strong><small>在我的反馈中继续跟进</small></span><ChevronRight /></button></div>
+            <div className="mobile-guide">{[
+              [Route, '反馈如何流转', '受理、分派、回复与归档', '提交后由学生权益部受理并确认问题类别，再分派至负责人或协同部门。处理进展会保留在反馈详情中。'],
+              [Clock3, '处理需要多久', '普通事项 1 个工作日内响应', '普通事项原则上 1 个工作日内首次响应。跨部门核实、维修等事项可在完整对话中查看进展。'],
+              [PhoneCall, '紧急情况处理', '先联系线下应急渠道', '涉及人身安全、突发疾病、火情时，请优先联系学院老师、楼宇值班或校园应急渠道。线上反馈可作为后续记录。'],
+              [ShieldCheck, '材料与隐私', '附件支持佐证，匿名保护身份', '可上传图片、文档和录屏。匿名事项不会向处理部门显示个人身份，系统保留必要审计记录。'],
+              [MessageCircleMore, '补充与撤回', '在我的反馈中继续跟进', '在我的反馈打开事项，可补充信息、查看回复及撤回自己的留言。未受理的反馈可以撤销。']
+            ].map(([Icon, title, subtitle, description]) => <details key={title}><summary><Icon /><span><strong>{title}</strong><small>{subtitle}</small></span><ChevronRight /></summary><p>{description}</p></details>)}</div>
           </section>
         </main>
         <nav className="mobile-tabbar" aria-label="手机端导航">
@@ -4676,32 +4818,81 @@ const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpe
 
 const SettingsModal = () => null;
 
-const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, portalView = 'student', onPortalChange, onBackToHub, renderLanguageSwitcher, language = 'zh', enableNotifications = false }) => {
+const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, portalView = 'student', onPortalChange, onBackToHub, renderLanguageSwitcher, language = 'zh', enableNotifications = false, notificationTarget }) => {
   const [feedbacks, setFeedbacks] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [activePage, setActivePage] = useState('dashboard');
   const [mobilePage, setMobilePage] = useState('home');
   const [composeOpen, setComposeOpen] = useState(false);
   const [mobileComposeOpen, setMobileComposeOpen] = useState(false);
-  const [composeCategory, setComposeCategory] = useState('');
+  const [draft, setDraft] = useState(emptyFeedbackDraft);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftMessage, setDraftMessage] = useState('');
+  const composeCategory = draft.category;
+  const setComposeCategory = category => setDraft(current => ({ ...current, category, subCategory: current.category === category ? current.subCategory : '' }));
+  const draftAccountId = user?.id || user?._id;
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [stats, setStats] = useState({ total: 0, pending: 0, processing: 0, resolved: 0, rejected: 0 });
+  const selectedFeedbackRef = useRef(null);
+  const feedbackRequestRef = useRef(0);
+  const submitInFlight = useRef(false);
+  selectedFeedbackRef.current = selectedFeedback;
   const clock = usePlatformClock(language);
   const serviceMetrics = useServiceMetrics(token);
   const unreadCount = useMemo(() => notifications.filter(item => !item.isRead).length, [notifications]);
 
-  const stats = useMemo(() => {
-    const s = { total: feedbacks.length, pending: 0, processing: 0, resolved: 0, rejected: 0 };
-    feedbacks.forEach(item => { s[item.status] = (s[item.status] || 0) + 1; });
-    return s;
-  }, [feedbacks]);
+  useEffect(() => {
+    let cancelled = false;
+    feedbackDraftStore(draftAccountId, 'get').then(saved => {
+      if (!cancelled && saved) { setDraft({ ...emptyFeedbackDraft(), ...saved }); setDraftMessage('已恢复暂存草稿（含附件）'); }
+    }).catch(error => { if (!cancelled) setDraftMessage(error.message); }).finally(() => { if (!cancelled) setDraftReady(true); });
+    return () => { cancelled = true; };
+  }, [draftAccountId]);
+
+  const saveFeedbackDraft = async () => {
+    try {
+      await feedbackDraftStore(draftAccountId, 'put', draft);
+      setDraftMessage('草稿及附件已保存，可在本设备继续填写');
+      setComposeOpen(false);
+      setMobileComposeOpen(false);
+    } catch (error) { setDraftMessage(error.message); }
+  };
 
   const fetchFeedbacks = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/feedback/my`, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await res.json();
-    if (data.success) setFeedbacks(data.feedbacks || []);
-  }, [token]);
+    const requestId = ++feedbackRequestRef.current;
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(feedbackPage), limit: '20' });
+      if (filter) params.set('status', filter);
+      if (search) params.set('search', search);
+      const data = await requestJson(`/feedback/my?${params}`, token);
+      if (requestId !== feedbackRequestRef.current) return;
+      setFeedbacks(data.feedbacks || []);
+      setPagination(data.pagination || { page: 1, pages: 1, total: 0 });
+      if (data.summary) setStats(data.summary);
+      if (data.pagination?.pages > 0 && feedbackPage > data.pagination.pages) setFeedbackPage(data.pagination.pages);
+      const selectedId = selectedFeedbackRef.current?._id;
+      if (selectedId) {
+        const detail = await requestJson(`/feedback/${selectedId}`, token);
+        if (requestId === feedbackRequestRef.current && selectedFeedbackRef.current?._id === selectedId) setSelectedFeedback(detail.feedback);
+      }
+    } catch (error) { console.error('反馈读取失败', error); }
+    finally { if (requestId === feedbackRequestRef.current) setListLoading(false); }
+  }, [token, feedbackPage, filter, search]);
+
+  useEffect(() => {
+    if (!notificationTarget?.feedback) return;
+    setSelectedFeedback(notificationTarget.feedback);
+    setActivePage('feedbacks');
+    setMobilePage('feedbacks');
+  }, [notificationTarget]);
 
   const fetchNotifications = useCallback(async () => {
     if (!enableNotifications) return;
@@ -4732,18 +4923,19 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
     } catch {}
   }, [enableNotifications, token]);
 
-  const handleOpenNotification = useCallback((notification) => {
+  const handleOpenNotification = useCallback(async (notification) => {
     const feedbackId = notification?.feedbackId?._id || notification?.feedbackId || null;
     if (feedbackId) {
-      const match = feedbacks.find(item => (item._id || item.id) === feedbackId);
-      if (match) {
-        setSelectedFeedback(match);
+      try {
+        const data = await requestJson(`/feedback/${feedbackId}`, token);
+        setSelectedFeedback(data.feedback);
         setActivePage('feedbacks');
         setMobilePage('feedbacks');
-      }
+        await markNotificationsRead([notification._id]);
+      } catch (error) { alert(error.message); return; }
     }
     setShowNotifications(false);
-  }, [feedbacks]);
+  }, [token, markNotificationsRead]);
 
   useEffect(() => {
     fetchFeedbacks();
@@ -4753,22 +4945,18 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
   }, [enableNotifications, fetchFeedbacks, fetchNotifications]);
 
   const openCompose = (category = '', mobile = false) => {
-    setComposeCategory(category);
+    if (!draftReady) return alert('草稿正在读取，请稍后重试');
+    if (category) setComposeCategory(category);
     if (mobile) setMobileComposeOpen(true);
     else setComposeOpen(true);
   };
 
   const submitFeedback = async (formData, files) => {
+    if (submitInFlight.current) return false;
+    submitInFlight.current = true;
     setLoading(true);
     try {
-      let uploadedFiles = [];
-      if (files?.length) {
-        const body = new FormData();
-        files.forEach(file => body.append('files', file));
-        const up = await fetch(`${API_BASE}/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body });
-        const upData = await up.json();
-        if (upData.success) uploadedFiles = upData.files;
-      }
+      const uploadedFiles = await uploadFeedbackFiles(files, token);
       const res = await fetch(`${API_BASE}/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -4780,24 +4968,27 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
         setMobileComposeOpen(false);
         setActivePage('feedbacks');
         setMobilePage('feedbacks');
+        setFeedbackPage(1);
+        feedbackDraftStore(draftAccountId, 'delete').catch(() => setDraftMessage('已提交，但旧草稿清理失败'));
         await fetchFeedbacks();
       } else alert(data.message || '提交失败');
       return data.success;
-    } catch {
-      alert('网络错误，请重试');
+    } catch (error) {
+      alert(error.message || '网络错误，请重试');
       return false;
     } finally {
+      submitInFlight.current = false;
       setLoading(false);
     }
   };
 
   const reply = async (feedbackId, content) => {
-    const res = await fetch(`${API_BASE}/feedback/${feedbackId}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ content }) });
-    const data = await res.json();
-    if (data.success) {
-      await fetchFeedbacks();
-      setSelectedFeedback(null);
-    } else alert(data.message || '发送失败');
+    try {
+      const data = await requestJson(`/feedback/${feedbackId}/reply`, token, { method: 'POST', body: JSON.stringify({ content }) });
+      setSelectedFeedback(current => current?._id === feedbackId ? data.feedback : current);
+      fetchFeedbacks();
+      return true;
+    } catch (error) { alert(error.message || '发送失败'); return false; }
   };
 
   const recall = async (feedbackId, replyId) => {
@@ -4821,11 +5012,13 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
   };
 
   const pageTitle = activePage === 'feedbacks' ? '我的反馈' : activePage === 'guide' ? '服务指南' : '权益工作台';
+  const listControls = { pagination, onPageChange: setFeedbackPage, filter, onFilterChange: status => { setFilter(status); setFeedbackPage(1); }, search, onSearchChange: value => { setSearch(value); setFeedbackPage(1); }, listLoading };
+  const draftControls = { draft, setDraft, onSaveDraft: saveFeedbackDraft, draftMessage };
 
   return (
     <>
       <div className="desktop-shell">
-        <Sidebar user={user} activePage={activePage} setActivePage={setActivePage} openCompose={openCompose} serviceMetrics={serviceMetrics} language={language} />
+        <Sidebar user={user} activePage={activePage} setActivePage={setActivePage} openCompose={openCompose} onOpenManage={getSievoxPortalRole(user) !== 'student' ? () => onPortalChange?.(defaultSievoxPortalView(user)) : null} serviceMetrics={serviceMetrics} language={language} />
         <main className="desktop-main">
           <Topbar
             pageTitle={pageTitle}
@@ -4840,13 +5033,13 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
             onBackToHub={onBackToHub}
             languageSwitcher={renderLanguageSwitcher?.()}
           />
-          <StudentDesktop user={user} stats={stats} feedbacks={feedbacks} activePage={activePage} setActivePage={setActivePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} onDeleteFeedback={deleteFeedback} clock={clock} />
+          <StudentDesktop {...listControls} user={user} stats={stats} feedbacks={feedbacks} activePage={activePage} setActivePage={setActivePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} onDeleteFeedback={deleteFeedback} clock={clock} />
         </main>
       </div>
-      <MobileShell user={user} feedbacks={feedbacks} stats={stats} page={mobilePage} setPage={setMobilePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} theme={theme} clock={clock} unreadCount={enableNotifications ? unreadCount : 0} onToggleNotifications={() => setShowNotifications(current => !current)} showNotifications={enableNotifications} languageSwitcher={renderLanguageSwitcher?.()} />
+      <MobileShell {...listControls} user={user} feedbacks={feedbacks} stats={stats} page={mobilePage} setPage={setMobilePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} onOpenManage={getSievoxPortalRole(user) !== 'student' ? () => onPortalChange?.(defaultSievoxPortalView(user)) : null} theme={theme} clock={clock} unreadCount={enableNotifications ? unreadCount : 0} onToggleNotifications={() => setShowNotifications(current => !current)} showNotifications={enableNotifications} languageSwitcher={renderLanguageSwitcher?.()} />
       <div className={cls('drawer-backdrop', (composeOpen || mobileComposeOpen) && 'is-open')} onClick={() => { setComposeOpen(false); setMobileComposeOpen(false); }}></div>
-      <ComposeDrawer open={composeOpen} category={composeCategory} setCategory={setComposeCategory} onClose={() => setComposeOpen(false)} onSubmit={submitFeedback} loading={loading} />
-      <ComposeDrawer mobile open={mobileComposeOpen} category={composeCategory} setCategory={setComposeCategory} onClose={() => setMobileComposeOpen(false)} onSubmit={submitFeedback} loading={loading} />
+      <ComposeDrawer {...draftControls} open={composeOpen} category={composeCategory} setCategory={setComposeCategory} onClose={() => setComposeOpen(false)} onSubmit={submitFeedback} loading={loading} />
+      <ComposeDrawer {...draftControls} mobile open={mobileComposeOpen} category={composeCategory} setCategory={setComposeCategory} onClose={() => setMobileComposeOpen(false)} onSubmit={submitFeedback} loading={loading} />
       {enableNotifications && (
         <NotificationDrawer
           open={showNotifications}
@@ -4865,7 +5058,7 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
 };
 
 export default function App() {
-  const { user, token, login, register, logout, refreshUser } = useAuth();
+  const { user, token, login, register, logout, refreshUser, authError } = useAuth();
   const theme = useTheme();
   const languageTools = useLanguage();
   const [portalView, setPortalView] = useState('superadmin');
@@ -4879,6 +5072,8 @@ export default function App() {
     return 'hub';
   });
   const [activeModule, setActiveModule] = useState(() => getInitialDepartmentModuleFromLocation());
+  const [departmentEntry, setDepartmentEntry] = useState('');
+  const [notificationTarget, setNotificationTarget] = useState(null);
   const historySyncRef = useRef({ initialized: false, applyingPop: false, signature: '' });
   const renderLanguageSwitcher = () => <LanguageSwitcher language={languageTools.language} setLanguage={languageTools.setLanguage} />;
 
@@ -4888,18 +5083,14 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!user?.isUltimateAdmin) setPortalView('superadmin');
-    else setPortalView(current => ['student', 'admin', 'superadmin'].includes(current) ? current : 'superadmin');
-  }, [user]);
-
-  useEffect(() => {
     if (user && appSurface === 'sievox') {
-      setPortalView(getDefaultSIEVOXPortalView(user));
+      setPortalView(defaultSievoxPortalView(user));
     }
   }, [user, appSurface]);
 
   useEffect(() => {
     if (!user) {
+      setNotificationTarget(null);
       const initialDepartmentModule = getInitialDepartmentModuleFromLocation();
       setAppSurface(initialDepartmentModule ? 'department' : (getCurrentPathSurface() || 'hub'));
       setActiveModule(initialDepartmentModule);
@@ -4909,7 +5100,12 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = (event) => {
-      if (!isSIEHUBHistoryState(event.state)) return;
+      if (!isSIEHUBHistoryState(event.state)) {
+        historySyncRef.current.applyingPop = true;
+        setAppSurface(getCurrentPathSurface() || 'hub');
+        setActiveModule(getInitialDepartmentModuleFromLocation());
+        return;
+      }
       const nextSurface = SIEHUB_APP_SURFACES.has(event.state.appSurface) ? event.state.appSurface : 'hub';
       historySyncRef.current.applyingPop = true;
       setAppSurface(nextSurface);
@@ -4943,6 +5139,7 @@ export default function App() {
   }, [user, appSurface, activeModule, portalView]);
 
   const openModule = (module) => {
+    setDepartmentEntry('');
     setActiveModule(module);
     if (module.key === 'hub_governance') {
       setAppSurface(user?.isUltimateAdmin ? 'ultimateOrganization' : 'hub');
@@ -4951,35 +5148,43 @@ export default function App() {
     setAppSurface('department');
   };
   const openDepartments = () => setAppSurface('departments');
+  const openUltimate = () => setAppSurface('ultimateOrganization');
   const openMy = () => setAppSurface('my');
-  const openSIEVOX = () => {
+  const openSIEVOX = (target = null) => {
+    setNotificationTarget(target?.feedback ? target : null);
     setActiveModule(SIEHUB_MODULES.find(module => module.key === 'student_rights'));
-    setPortalView(getDefaultSIEVOXPortalView(user));
+    setPortalView(defaultSievoxPortalView(user));
     setAppSurface('sievox');
+  };
+  const openSievoxPerformance = () => {
+    setDepartmentEntry('performance');
+    setActiveModule(SIEHUB_MODULES.find(module => module.key === 'student_rights'));
+    setAppSurface('department');
   };
   const openSIEBridge = () => {
     setActiveModule(SIEHUB_MODULES.find(module => module.key === 'academic_technology'));
     setAppSurface('siebridge');
   };
-  const sievoxPortalView = user?.isUltimateAdmin ? portalView : getDefaultSIEVOXPortalView(user);
+  const sievoxPortalView = resolveSievoxPortalView(user, portalView);
 
   let content;
-  if (!user) content = <LoginPage onLogin={login} onRegister={register} theme={theme} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
-  else if (appSurface === 'hub') content = <SIEHUBHome user={user} token={token} theme={theme} onOpenModule={openModule} onOpenDepartments={openDepartments} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenMy={openMy} onLogout={logout} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
+  if (!user && token) content = <main className="auth-session-status"><p role="status">{authError || '正在验证登录…'}</p>{authError && <button type="button" onClick={refreshUser}>重新连接</button>}<button type="button" onClick={logout}>退出登录</button></main>;
+  else if (!user) content = <LoginPage onLogin={login} onRegister={register} theme={theme} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
+  else if (appSurface === 'hub') content = <SIEHUBHome user={user} token={token} theme={theme} onOpenModule={openModule} onOpenDepartments={openDepartments} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenUltimate={openUltimate} onOpenMy={openMy} onLogout={logout} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'departments') content = <SIEHUBDepartmentDirectory user={user} theme={theme} onBack={() => setAppSurface('hub')} onOpenModule={openModule} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'my') content = <MyProfileWindow user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenDepartments={openDepartments} onOpenMy={openMy} onLogout={logout} onRefreshUser={refreshUser} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'ultimateOrganization') content = <UltimateOrganizationWindow user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'sievox') {
     content = sievoxPortalView === 'student'
-      ? <DashboardPage user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} theme={theme} portalView={sievoxPortalView} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} renderLanguageSwitcher={renderLanguageSwitcher} language={languageTools.language} enableNotifications={false} />
-      : <AdminDashboard user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} themeTools={theme} portalView={sievoxPortalView} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
+      ? <DashboardPage key={user.id || user._id} notificationTarget={notificationTarget} user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} theme={theme} portalView={sievoxPortalView} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} renderLanguageSwitcher={renderLanguageSwitcher} language={languageTools.language} enableNotifications={true} />
+      : <AdminDashboard key={user.id || user._id} notificationTarget={notificationTarget} user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} onOpenUltimate={openUltimate} onOpenPerformance={openSievoxPerformance} themeTools={theme} portalView={sievoxPortalView} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
   }
-  else if (appSurface === 'department') content = <DepartmentPlaceholder module={activeModule} user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} language={languageTools.language} />;
+  else if (appSurface === 'department') content = <DepartmentPlaceholder module={activeModule} user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenMy={openMy} onLogout={logout} initialWorkspace={departmentEntry} languageSwitcher={renderLanguageSwitcher()} language={languageTools.language} />;
   else if (appSurface === 'siebridge') content = <SIEBridgeWindow user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
   else if (user.role === 'admin' || user.role === 'superadmin') {
     content = (
       <>
-        <AdminDashboard user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} themeTools={theme} portalView={user.isUltimateAdmin ? portalView : undefined} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />
+        <AdminDashboard user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} onOpenPerformance={openSievoxPerformance} themeTools={theme} portalView={user.isUltimateAdmin ? portalView : undefined} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />
         <ThemePanel theme={theme} />
       </>
     );

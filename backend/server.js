@@ -21,12 +21,14 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs');
-const https = require('https'); // [新增] 引入 https 模块
-const http = require('http'); // [新增] 引入 http 模块用于重定向
+const { rateLimit } = require('express-rate-limit');
+const { idOf, isConsistentIdentity, serializeFeedbackForViewer, paginationOf, canResetPassword, summarizeEvaluations, calculatePerformance, safeUploadType, matchesFileSignature } = require('./security-policy');
+const { installCulturePerformanceRoutes } = require('./culture-performance');
 const {
   ORGANIZATIONS,
   MEMBER_ROLES,
   POSITION_TITLES,
+  canWithdrawSievoxFeedback,
   getDepartment,
   getDepartmentLabel,
   getHubModuleAccess,
@@ -40,6 +42,7 @@ const {
   SIEVOX_DEPARTMENT,
   validateAssignment
 } = require('./organization');
+if (typeof canWithdrawSievoxFeedback !== 'function') throw new Error('organization.js 缺少反馈撤回权限导出，请部署同一版本');
 const { installSieBridgeRoutes } = require('./siebridge');
 const app = express();
 app.set('trust proxy', 1);
@@ -57,7 +60,7 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + ext);
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 限制 50MB
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter: (req, file, cb) => cb(safeUploadType(file.originalname, file.mimetype) ? null : new Error('不支持此附件类型'), safeUploadType(file.originalname, file.mimetype)) }); // 限制 50MB
 
 const avatarUploadDir = path.join(uploadDir, 'avatars');
 if (!fs.existsSync(avatarUploadDir)) {
@@ -108,7 +111,7 @@ const departmentIntroUpload = multer({
 });
 
 // [修复] 将静态资源映射到 /api/uploads 下，完美利用现有的代理配置
-app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
+// Feedback uploads are served below only after parent-object authorization.
 const departmentNoticeUploadDir = path.join(__dirname, 'department_notice_uploads');
 if (!fs.existsSync(departmentNoticeUploadDir)) {
   fs.mkdirSync(departmentNoticeUploadDir, { recursive: true });
@@ -173,13 +176,12 @@ const config = {
   smtpUser: process.env.SMTP_USER || '',
   smtpPass: process.env.SMTP_PASS || '',
   smtpFrom: process.env.SMTP_FROM || process.env.SMTP_USER || 'SIEHUB <no-reply@siehub.local>',
-  sslKeyPath: process.env.SSL_KEY_PATH || path.join(__dirname, 'ssl', 'sievox.cn.key'),
-  sslCertPath: process.env.SSL_CERT_PATH || path.join(__dirname, 'ssl', 'sievox.cn.pem')
+  bindHost: '127.0.0.1'
 };
 
 const getLoginTokenExpiresIn = (remember = false) => (remember ? config.jwtRememberExpire : config.jwtExpire);
 const isMobileUserAgent = (userAgent = '') => /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-const shouldPersistLogin = (remember = false, userAgent = '') => remember || isMobileUserAgent(userAgent);
+const shouldPersistLogin = (remember = false) => remember === true;
 const allowedCorsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
   : [
@@ -226,6 +228,8 @@ app.use(cors({
 app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
+app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false, message: { success: false, message: '请求过于频繁，请稍后再试' } }));
+
 // 数据清洗 - 防止NoSQL注入
 app.use(mongoSanitize());
 
@@ -258,7 +262,7 @@ const userSchema = new mongoose.Schema({
     trim: true,
     validate: {
       validator: function(value) {
-        return this.isUltimateAdmin || this.role !== 'student' || /^\d{10}$/.test(value);
+        return (!this.isNew && !this.isModified('studentId')) || this.isUltimateAdmin || this.role !== 'student' || /^\d{10}$/.test(value);
       },
       message: '学生账号学号必须为唯一的10位数字'
     }
@@ -333,6 +337,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  tokenVersion: { type: Number, default: 0 },
+  identityRevision: { type: Number, default: 0 },
+  activeCohortId: { type: mongoose.Schema.Types.ObjectId, ref: 'Cohort', default: null },
+  deactivatedAt: Date,
   lastLogin: Date,
   loginAttempts: {
     type: Number,
@@ -346,6 +354,7 @@ const userSchema = new mongoose.Schema({
 // 密码加密
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
+  if (!this.isNew) this.tokenVersion = Number(this.tokenVersion || 0) + 1;
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
@@ -364,7 +373,7 @@ const User = mongoose.model('User', userSchema);
 
 const emailVerificationSchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, index: true },
-  purpose: { type: String, enum: ['register', 'reset_password'], required: true, index: true },
+  purpose: { type: String, enum: ['register', 'reset_password', 'profile_email'], required: true, index: true },
   codeHash: { type: String, required: true },
   expiresAt: { type: Date, required: true, index: { expires: 0 } },
   attempts: { type: Number, default: 0 },
@@ -375,6 +384,16 @@ const emailVerificationSchema = new mongoose.Schema({
 emailVerificationSchema.index({ email: 1, purpose: 1 });
 
 const EmailVerification = mongoose.model('EmailVerification', emailVerificationSchema);
+const VerificationWindow = mongoose.model('VerificationWindow', new mongoose.Schema({
+  _id: String, lastSentAt: Date, expiresAt: { type: Date, index: { expires: 0 } }
+}));
+const OperationLock = mongoose.model('OperationLock', new mongoose.Schema({ _id: String, owner: String, expiresAt: { type: Date, index: { expires: 0 } } }));
+const RevokedSession = mongoose.model('RevokedSession', new mongoose.Schema({ _id: String, expiresAt: { type: Date, index: { expires: 0 } } }));
+const PrivateUpload = mongoose.model('PrivateUpload', new mongoose.Schema({ filename: { type: String, unique: true }, owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, path: String, originalName: String, mimetype: String }));
+const PerformanceCalibration = mongoose.model('PerformanceCalibration', new mongoose.Schema({
+  _id: String, semester: String, organization: String, department: String, dimension: String,
+  values: [{ volunteer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, score: Number }], recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, updatedAt: Date
+}));
 
 // 反馈模型
 const feedbackSchema = new mongoose.Schema({
@@ -543,11 +562,7 @@ const hashPrivacyValue = (value) => crypto
 const performanceRecordSchema = new mongoose.Schema({
   volunteer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  dimension: { 
-    type: String, 
-    enum: ['attendance', 'activity', 'feedback', 'copywriting', 'others', 'bonus'], // [修改] 纯加分维度
-    required: true 
-  },
+  dimension: { type: String, required: true },
   score: { type: Number, required: true }, 
   reason: { type: String, required: true },
   occurrenceDate: { type: Date, required: true },
@@ -559,12 +574,31 @@ const performanceRecordSchema = new mongoose.Schema({
 
 const PerformanceRecord = mongoose.model('PerformanceRecord', performanceRecordSchema);
 
-const performancePolicyDimensionSchema = new mongoose.Schema({
-  key: {
+// 多来源绩效评价：评价人身份始终入库，返回给被评价人时按权限脱敏。
+const performanceEvaluationSchema = new mongoose.Schema({
+  target: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  evaluator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  organization: { type: String, enum: Object.keys(ORGANIZATIONS), required: true },
+  department: { type: String, required: true },
+  semester: { type: String, required: true },
+  kind: {
     type: String,
-    enum: ['attendance', 'activity', 'feedback', 'copywriting', 'others', 'bonus'],
+    enum: ['self', 'leader_peer', 'presidium_leader', 'volunteer_leader', 'volunteer_peer', 'leader_volunteer'],
     required: true
   },
+  score: { type: Number, required: true, min: 0, max: 100 },
+  comment: { type: String, default: '', maxlength: 2000 },
+  anonymous: { type: Boolean, default: true }
+}, { timestamps: true });
+performanceEvaluationSchema.index(
+  { target: 1, evaluator: 1, semester: 1, kind: 1 },
+  { unique: true }
+);
+performanceEvaluationSchema.index({ organization: 1, department: 1, semester: 1, target: 1 });
+const PerformanceEvaluation = mongoose.model('PerformanceEvaluation', performanceEvaluationSchema);
+
+const performancePolicyDimensionSchema = new mongoose.Schema({
+  key: { type: String, required: true },
   label: { type: String, required: true },
   maxScore: { type: Number, default: null },
   capLabel: { type: String, required: true },
@@ -588,6 +622,8 @@ const departmentPerformancePolicySchema = new mongoose.Schema({
   totalBaseScore: { type: Number, default: 100 },
   bonusMode: { type: String, enum: ['extra'], default: 'extra' },
   dimensions: { type: [performancePolicyDimensionSchema], default: [] },
+  evaluationSources: { type: [String], default: ['self', 'leader'] },
+  evaluationWeights: { type: mongoose.Schema.Types.Mixed, default: () => ({ self: 30, leader: 70 }) },
   notes: { type: [String], default: [] },
   version: { type: Number, default: 1 },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
@@ -645,7 +681,7 @@ const localizedTextSchema = new mongoose.Schema({
 
 const departmentNoticeSchema = new mongoose.Schema({
   organization: { type: String, enum: Object.keys(ORGANIZATIONS), required: true },
-  department: { type: String, required: true },
+  department: { type: String, default: 'default' },
   title: { type: localizedTextSchema, required: true },
   summary: { type: localizedTextSchema, default: () => ({}) },
   body: { type: localizedTextSchema, default: () => ({}) },
@@ -655,6 +691,8 @@ const departmentNoticeSchema = new mongoose.Schema({
   sourceExternalId: { type: String, default: undefined },
   status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft', index: true },
   publishedAt: Date,
+  heroEnabled: { type: Boolean, default: false, index: true },
+  heroOrder: { type: Number, default: 0 },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   publishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
@@ -696,22 +734,28 @@ const SystemConfig = mongoose.model('SystemConfig', systemConfigSchema);
 // 冻结时对 name/studentId 做快照，防止账号后续被注销/改名后历史名单丢失姓名。
 const semesterMemberSchema = new mongoose.Schema({
   volunteer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  originalUserId: mongoose.Schema.Types.ObjectId,
+  organization: String,
+  department: String,
+  isActive: { type: Boolean, default: true },
+  endedAt: Date,
   semester:  { type: String, required: true },
   name:      { type: String },   // 快照
   studentId: { type: String },   // 快照
   addedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
-semesterMemberSchema.index({ volunteer: 1, semester: 1 }, { unique: true });
+semesterMemberSchema.index({ volunteer: 1, semester: 1, organization: 1, department: 1 }, { unique: true });
 const SemesterMember = mongoose.model('SemesterMember', semesterMemberSchema);
 
 const cohortSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true, trim: true },
   startDate: Date,
   endDate: Date,
-  status: { type: String, enum: ['draft', 'active', 'archived'], default: 'draft' },
+  status: { type: String, enum: ['draft', 'active', 'archiving', 'archived'], default: 'draft' },
   semesters: [{ type: String }],
   archivedAt: Date,
-  archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  archiveStartedAt: Date
 }, { timestamps: true });
 const Cohort = mongoose.model('Cohort', cohortSchema);
 
@@ -742,16 +786,20 @@ const cohortMembershipSchema = new mongoose.Schema({
     organization: String,
     department: String,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
+    performanceSnapshot: mongoose.Schema.Types.Mixed
   }],
   performanceSnapshot: {
     total: { type: Number, default: 0 },
     byDimension: { type: mongoose.Schema.Types.Mixed, default: {} },
     rank: Number,
     records: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    rawByDimension: mongoose.Schema.Types.Mixed,
+    policy: mongoose.Schema.Types.Mixed,
     semesters: { type: [String], default: [] },
     archivedAt: Date
   },
+  endedAt: Date,
   archivedAt: Date,
   archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
@@ -784,14 +832,16 @@ async function markSemesterManaged(semester) {
 //       3) 无显式名单且为当前运行学期(未 managed) → 当前全部 admin(上线兼容,可编辑)
 //       4) 无显式名单且为历史学期(未 managed) → 该学期绩效流水中出现过的成员
 async function resolveSemesterMembers(semester) {
-  const explicit = await SemesterMember.find({ semester })
+  const explicit = await SemesterMember.find({ semester, isActive: { $ne: false } })
     .populate('volunteer', 'name studentId')
     .sort({ createdAt: 1 });
   if (explicit.length > 0) {
     const members = explicit.map(m => ({
-      _id: m.volunteer?._id || m.volunteer,
+      _id: m.volunteer?._id || m.volunteer || m.originalUserId,
       name: m.volunteer?.name || m.name,
-      studentId: m.volunteer?.studentId || m.studentId
+      studentId: m.volunteer?.studentId || m.studentId,
+      organization: m.organization,
+      department: m.department
     }));
     return { members, source: 'explicit' };
   }
@@ -806,9 +856,9 @@ async function resolveSemesterMembers(semester) {
   const currentSemester = config ? config.value : null;
 
   if (semester && semester === currentSemester) {
-    const admins = await User.find({ memberRole: 'volunteer' })
-      .select('name studentId').sort({ createdAt: -1 });
-    return { members: admins.map(u => ({ _id: u._id, name: u.name, studentId: u.studentId })), source: 'current' };
+    const admins = await User.find({ memberRole: 'volunteer', role: 'admin', positionTitle: 'volunteer', isActive: true })
+      .select('name studentId organization department').sort({ createdAt: -1 });
+    return { members: admins.map(u => ({ _id: u._id, name: u.name, studentId: u.studentId, organization: u.organization, department: u.department })), source: 'current' };
   }
 
   const volunteerIds = await PerformanceRecord.find({ semester }).distinct('volunteer');
@@ -836,11 +886,12 @@ const authenticate = async (req, res, next) => {
     const decoded = jwt.verify(token, config.jwtSecret);
     const user = await User.findById(decoded.id);
     
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || Number(decoded.tokenVersion || 0) !== Number(user.tokenVersion || 0) || (decoded.jti && await RevokedSession.exists({ _id: decoded.jti }))) {
       return res.status(401).json({ success: false, message: '用户不存在或已被禁用' });
     }
     
     req.user = user;
+    req.auth = decoded;
     next();
   } catch (error) {
     return res.status(401).json({ success: false, message: '认证失败，请重新登录' });
@@ -914,7 +965,7 @@ const decodeOriginalFilename = (name = '') => {
 const normalizeEmail = (email) => sanitizeInput(email || '').toLowerCase();
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
 const isValidStudentId = (studentId) => /^\d{10}$/.test(studentId);
-const createVerificationCode = () => String(Math.floor(100000 + Math.random() * 900000));
+const createVerificationCode = () => String(crypto.randomInt(100000, 1000000));
 const hashVerificationCode = (email, purpose, code) => crypto
   .createHash('sha256')
   .update(`${config.jwtSecret}:${purpose}:${normalizeEmail(email)}:${code}`)
@@ -922,8 +973,20 @@ const hashVerificationCode = (email, purpose, code) => crypto
 
 const hasSmtpConfig = () => Boolean(config.smtpHost && config.smtpUser && config.smtpPass);
 
+const getEmailDeliveryFailure = (error) => {
+  const recipientRejected = error?.responseCode === 550
+    && (error.command === 'RCPT TO' || error.command === 'DATA' || error.code === 'EENVELOPE');
+  if (recipientRejected) {
+    return {
+      status: 400,
+      message: '邮箱地址不存在或被邮件服务商拒收，请检查邮箱地址'
+    };
+  }
+  return { status: 500, message: '验证码发送失败，请稍后重试' };
+};
+
 const sendVerificationEmail = async ({ email, code, purpose }) => {
-  const purposeLabel = purpose === 'reset_password' ? '找回密码' : '注册账号';
+  const purposeLabel = purpose === 'reset_password' ? '找回密码' : purpose === 'profile_email' ? '更换邮箱' : '注册账号';
   const subject = `SIEHUB ${purposeLabel}验证码`;
   const text = `你的 SIEHUB ${purposeLabel}验证码是：${code}。验证码10分钟内有效，请勿转发给他人。`;
   const html = `
@@ -952,50 +1015,43 @@ const sendVerificationEmail = async ({ email, code, purpose }) => {
 
 const issueEmailVerification = async ({ email, purpose }) => {
   const normalizedEmail = normalizeEmail(email);
-  const latest = await EmailVerification.findOne({ email: normalizedEmail, purpose }).sort({ createdAt: -1 });
-  if (latest?.lastSentAt && Date.now() - latest.lastSentAt.getTime() < 60000) {
-    const retryAfter = Math.ceil((60000 - (Date.now() - latest.lastSentAt.getTime())) / 1000);
-    return { ok: false, status: 429, message: `验证码发送过于频繁，请 ${retryAfter} 秒后再试` };
+  const now = new Date();
+  const windowKey = `${purpose}:${normalizedEmail}`;
+  try {
+    const reservation = await VerificationWindow.findOneAndUpdate({ _id: windowKey, lastSentAt: { $lte: new Date(now - 60000) } },
+      { lastSentAt: now, expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) }, { upsert: true, new: true });
+    if (!reservation) return { ok: false, status: 429, message: '验证码发送过于频繁，请一分钟后再试' };
+  } catch (error) {
+    if (error.code === 11000) return { ok: false, status: 429, message: '验证码发送过于频繁，请一分钟后再试' };
+    throw error;
   }
-
   const code = createVerificationCode();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-  await EmailVerification.create({
-    email: normalizedEmail,
-    purpose,
-    codeHash: hashVerificationCode(normalizedEmail, purpose, code),
-    expiresAt,
-    lastSentAt: new Date()
-  });
-  const delivery = await sendVerificationEmail({ email: normalizedEmail, code, purpose });
-  return { ok: true, expiresAt, ...delivery };
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+  let verification;
+  try {
+    await EmailVerification.updateMany({ email: normalizedEmail, purpose, verifiedAt: null }, { $set: { verifiedAt: now } });
+    verification = await EmailVerification.create({ email: normalizedEmail, purpose, codeHash: hashVerificationCode(normalizedEmail, purpose, code), expiresAt, lastSentAt: now });
+    const delivery = await sendVerificationEmail({ email: normalizedEmail, code, purpose });
+    return { ok: true, expiresAt, ...delivery };
+  } catch (error) {
+    if (verification) await EmailVerification.deleteOne({ _id: verification._id });
+    await VerificationWindow.deleteOne({ _id: windowKey, lastSentAt: now });
+    throw error;
+  }
 };
 
 const verifyEmailCode = async ({ email, purpose, code, consume = true }) => {
   const normalizedEmail = normalizeEmail(email);
   const cleanCode = sanitizeInput(code || '');
   if (!/^\d{6}$/.test(cleanCode)) return { ok: false, message: '请输入6位邮箱验证码' };
-
-  const record = await EmailVerification.findOne({
-    email: normalizedEmail,
-    purpose,
-    expiresAt: { $gt: new Date() },
-    verifiedAt: null
-  }).sort({ createdAt: -1 });
-
-  if (!record) return { ok: false, message: '验证码不存在或已过期，请重新获取' };
-  if (record.attempts >= 5) return { ok: false, message: '验证码错误次数过多，请重新获取' };
-
+  const record = await EmailVerification.findOneAndUpdate({ email: normalizedEmail, purpose, expiresAt: { $gt: new Date() }, verifiedAt: null, attempts: { $lt: 5 } },
+    { $inc: { attempts: 1 } }, { new: true, sort: { createdAt: -1 } });
+  if (!record) return { ok: false, message: '验证码已过期、已使用或错误次数过多，请重新获取' };
   const expectedHash = hashVerificationCode(normalizedEmail, purpose, cleanCode);
-  if (record.codeHash !== expectedHash) {
-    record.attempts += 1;
-    await record.save();
-    return { ok: false, message: '验证码错误' };
-  }
-
+  if (record.codeHash !== expectedHash) return { ok: false, message: '验证码错误' };
   if (consume) {
-    record.verifiedAt = new Date();
-    await record.save();
+    const consumed = await EmailVerification.findOneAndUpdate({ _id: record._id, codeHash: expectedHash, verifiedAt: null, expiresAt: { $gt: new Date() } }, { $set: { verifiedAt: new Date() } }, { new: true });
+    if (!consumed) return { ok: false, message: '验证码已使用，请重新获取' };
   }
   return { ok: true, record };
 };
@@ -1019,31 +1075,9 @@ const sanitizeManagedDepartments = (departments = [], assignedBy = null) => {
     }));
 };
 
-const getUserManagedDepartments = (user = {}) => {
-  if (user.isUltimateAdmin) return listDepartments();
-  const assignments = [];
-
-  if (['department_head', 'youth_league_cadre'].includes(user.positionTitle) && user.organization && user.department) {
-    assignments.push({ organization: user.organization, department: user.department });
-  }
-
-  if (Array.isArray(user.managedDepartments)) {
-    user.managedDepartments.forEach(item => {
-      if (isValidManagedDepartment(item)) assignments.push({
-        organization: item.organization,
-        department: item.department
-      });
-    });
-  }
-
-  const seen = new Set();
-  return assignments.filter(item => {
-    const key = `${item.organization}:${item.department}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+const getUserManagedDepartments = (user = {}) => user.isUltimateAdmin ? listDepartments() : getHubModuleAccess(user)
+  .filter(module => module.accessLevel === 'manage')
+  .map(({ organization, department }) => ({ organization, department }));
 
 const serializeManagedDepartment = (item = {}) => ({
   organization: item.organization,
@@ -1084,9 +1118,9 @@ const getPerformancePolicyModuleAccess = (user, assignment) => {
     moduleId: moduleAccess.moduleId,
     accessLevel: moduleAccess.accessLevel,
     capabilities: moduleAccess.capabilities || [],
-    canEdit: moduleAccess.capabilities?.includes('manage_department_performance') ||
+    canEdit: !(assignment.organization === 'student_union' && assignment.department === 'student_rights') && (moduleAccess.capabilities?.includes('manage_department_performance') ||
       moduleAccess.capabilities?.includes('manage_volunteer_performance_policy') ||
-      false
+      false)
   };
 };
 
@@ -1158,12 +1192,7 @@ const getDepartmentCapabilityAccess = (user, assignment, capability) => {
 const hasDepartmentCapability = (user, assignment, capability) =>
   Boolean(getDepartmentCapabilityAccess(user, assignment, capability));
 
-const canUseSensitiveSecurityTools = (user = {}) =>
-  Boolean(
-    user.isUltimateAdmin ||
-    (user.role === 'superadmin' && (!user.positionTitle || user.positionTitle === 'student')) ||
-    ['presidium_member', 'youth_league_deputy_secretary'].includes(user.positionTitle)
-  );
+const canUseSensitiveSecurityTools = (user = {}) => Boolean(user.isUltimateAdmin || (isConsistentIdentity(user) && user.memberRole === 'presidium'));
 
 const cleanText = (value, maxLength = 500) => {
   const clean = sanitizeInput(value || '');
@@ -1192,6 +1221,8 @@ const normalizeNoticePayload = (payload = {}, existing = null) => {
   const title = cleanLocalizedText(payload.title, existing?.title || {}, 120);
   const summary = cleanLocalizedText(payload.summary, existing?.summary || {}, 260);
   const body = cleanLocalizedText(payload.body, existing?.body || {}, 6000);
+  const department = cleanText(payload.department ?? existing?.department ?? 'default', 80) || 'default';
+  const heroOrderValue = Number(payload.heroOrder ?? existing?.heroOrder ?? 0);
 
   return {
     title,
@@ -1202,7 +1233,10 @@ const normalizeNoticePayload = (payload = {}, existing = null) => {
     source,
     sourceExternalId: cleanText(payload.sourceExternalId ?? existing?.sourceExternalId ?? '', 160) || undefined,
     status,
-    publishedAt
+    publishedAt,
+    department,
+    heroEnabled: payload.heroEnabled ?? existing?.heroEnabled ?? false,
+    heroOrder: Number.isFinite(heroOrderValue) ? heroOrderValue : 0
   };
 };
 
@@ -1230,6 +1264,8 @@ const serializeDepartmentNotice = (notice) => {
     source: item.source || 'manual',
     sourceExternalId: item.sourceExternalId || '',
     status: item.status,
+    heroEnabled: Boolean(item.heroEnabled),
+    heroOrder: Number(item.heroOrder || 0),
     publishedAt: item.publishedAt || null,
     createdBy: serializeNoticeUserBrief(item.createdBy),
     updatedBy: serializeNoticeUserBrief(item.updatedBy),
@@ -2121,6 +2157,8 @@ const serializeDepartmentPerformancePolicy = (policyDoc, organization, departmen
   if (!policyDoc) {
     return {
       ...basePolicy,
+      evaluationSources: ['self', 'leader'],
+      evaluationWeights: { self: 30, leader: 70 },
       isCustomized: false,
       updatedAt: null,
       updatedBy: null
@@ -2159,6 +2197,8 @@ const serializeDepartmentPerformancePolicy = (policyDoc, organization, departmen
       }))
       : basePolicy.dimensions,
     notes: Array.isArray(policy.notes) && policy.notes.length ? policy.notes : basePolicy.notes,
+    evaluationSources: Array.isArray(policy.evaluationSources) && policy.evaluationSources.length ? policy.evaluationSources : ['self', 'leader'],
+    evaluationWeights: policy.evaluationWeights || { self: 30, leader: 70 },
     isCustomized: true,
     updatedAt: policy.updatedAt || null,
     updatedBy
@@ -2173,21 +2213,24 @@ const sanitizePolicyText = (value, fallback, maxLength = 220) => {
 
 const normalizeDepartmentPerformancePolicyPayload = (payload = {}, organization, department) => {
   const basePolicy = getVolunteerPerformancePolicy(organization, department);
+  const keepSievoxTemplate = organization === 'student_union' && department === 'student_rights';
   const incomingDimensions = Array.isArray(payload.dimensions) ? payload.dimensions : [];
   const incomingByKey = new Map(incomingDimensions.map(item => [item?.key, item]));
-  const dimensions = basePolicy.dimensions.map(defaultDimension => {
+  const sourceDimensions = keepSievoxTemplate || !incomingDimensions.length ? basePolicy.dimensions : incomingDimensions.slice(0, 24);
+  const dimensions = sourceDimensions.map((defaultDimension, index) => {
     const incoming = incomingByKey.get(defaultDimension.key) || {};
-    const isBonus = defaultDimension.key === 'bonus';
+    const key = sanitizePolicyText(defaultDimension.key || `custom_${index + 1}`, `custom_${index + 1}`, 48).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const isBonus = defaultDimension.scoringMode === 'bonus' || key === 'bonus';
     const requestedMax = Number(incoming.maxScore ?? defaultDimension.maxScore ?? 0);
     const maxScore = isBonus ? null : Math.max(0, Math.min(100, Number.isFinite(requestedMax) ? requestedMax : defaultDimension.maxScore));
     return {
-      key: defaultDimension.key,
+      key,
       label: sanitizePolicyText(incoming.label, defaultDimension.label, 32),
       maxScore,
       capLabel: sanitizePolicyText(incoming.capLabel, isBonus ? '附加' : `${maxScore}分`, 16),
       color: defaultDimension.color,
       rule: sanitizePolicyText(incoming.rule, defaultDimension.rule, 420),
-      scoringMode: defaultDimension.scoringMode
+      scoringMode: isBonus ? 'bonus' : 'capped_additive'
     };
   });
   const totalBaseScore = dimensions
@@ -2198,6 +2241,8 @@ const normalizeDepartmentPerformancePolicyPayload = (payload = {}, organization,
     ? payload.notes.map(item => sanitizePolicyText(item, '', 120)).filter(Boolean).slice(0, 4)
     : basePolicy.notes;
 
+  const evaluationSources = keepSievoxTemplate ? ['self', 'leader'] : (Array.isArray(payload.evaluationSources) && payload.evaluationSources.length ? payload.evaluationSources.slice(0, 8).map(item => sanitizePolicyText(item, '', 40)).filter(Boolean) : ['self', 'leader']);
+  const evaluationWeights = keepSievoxTemplate ? { self: 30, leader: 70 } : (payload.evaluationWeights && typeof payload.evaluationWeights === 'object' ? payload.evaluationWeights : { self: 30, leader: 70 });
   return {
     sourcePolicyId: basePolicy.sourcePolicyId,
     template: basePolicy.template,
@@ -2207,7 +2252,9 @@ const normalizeDepartmentPerformancePolicyPayload = (payload = {}, organization,
     totalBaseScore,
     bonusMode: basePolicy.bonusMode,
     dimensions,
-    notes: notes.length ? notes : basePolicy.notes
+    notes: notes.length ? notes : basePolicy.notes,
+    evaluationSources,
+    evaluationWeights
   };
 };
 
@@ -2337,7 +2384,7 @@ const getSemesterInfoFromDate = (value) => {
 
 const getFirstAdminResponseAt = (feedback = {}) => {
   const times = (feedback.responses || [])
-    .filter(resp => ['admin', 'superadmin'].includes(resp.senderType) && resp.isRecalled !== true && resp.createdAt)
+    .filter(resp => (['admin', 'superadmin'].includes(resp.senderType) || (!resp.senderType && resp.adminId)) && resp.isRecalled !== true && resp.createdAt)
     .map(resp => new Date(resp.createdAt))
     .filter(date => !Number.isNaN(date.getTime()))
     .sort((a, b) => a.getTime() - b.getTime());
@@ -2365,9 +2412,7 @@ const buildAdminFeedbackQueryFromRequest = (req, { forceExcludeRevoked = false, 
   if (category) query.category = sanitizeInput(category);
   if (priority) query.priority = sanitizeInput(priority);
 
-  if (req.user.role === 'superadmin' && !req.user.isUltimateAdmin) {
-    Object.assign(query, buildDepartmentScopedQuery(req.user));
-  }
+  Object.assign(query, buildDepartmentScopedQuery(req.user));
 
   if (!ignoreTimeRange) {
     if (semester) {
@@ -2404,7 +2449,8 @@ const buildAdminFeedbackQueryFromRequest = (req, { forceExcludeRevoked = false, 
 };
 
 const csvCell = (value) => {
-  const text = value === null || value === undefined ? '' : String(value);
+  const raw = value === null || value === undefined ? '' : String(value);
+  const text = /^[=+@-]/.test(raw) ? `'${raw}` : raw;
   return `"${text.replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
 };
 
@@ -2424,8 +2470,8 @@ const formatDateTimeForReport = (value) => {
 
 const getDepartmentPerformanceAccess = (user, assignment) => {
   const access = getPerformancePolicyModuleAccess(user, assignment);
-  if (!access || !access.canEdit) return null;
-  return access;
+  if (!access?.capabilities?.includes('manage_department_performance')) return null;
+  return { ...access, canManageRecords: true };
 };
 
 const serializeDepartmentPerformanceRecord = (record) => ({
@@ -2452,6 +2498,59 @@ const serializeDepartmentPerformanceRecord = (record) => ({
   createdAt: record.createdAt
 });
 
+const PERFORMANCE_EVALUATION_KINDS = {
+  self: { label: '自评', weight: 25 },
+  leader_peer: { label: '负责人互评', weight: 25 },
+  presidium_leader: { label: '主席团评议负责人', weight: 25 },
+  volunteer_leader: { label: '志愿者评议负责人', weight: 25 },
+  volunteer_peer: { label: '志愿者互评', weight: 25 },
+  leader_volunteer: { label: '负责人评议志愿者', weight: 25 }
+};
+
+const isPerformanceLeader = (user = {}) => isConsistentIdentity(user) && user.memberRole === 'department_lead';
+const isPerformancePresidium = (user = {}) => isConsistentIdentity(user) && user.memberRole === 'presidium';
+const isSameAssignment = (user, assignment) => user?.organization === assignment.organization && user?.department === assignment.department;
+const hasManagedAssignment = (user, assignment) => user?.isUltimateAdmin || getUserManagedDepartments(user).some(item => isSameAssignment(item, assignment));
+const evaluationTargetKind = (user = {}) => isPerformanceLeader(user) ? 'leader' : user.memberRole === 'volunteer' ? 'volunteer' : 'other';
+
+const canSubmitPerformanceEvaluation = (evaluator, target, kind, assignment) => {
+  if (!evaluator || !target || !isSameAssignment(target, assignment)) return false;
+  if (!isConsistentIdentity(evaluator) || !isConsistentIdentity(target)) return false;
+  const targetKind = evaluationTargetKind(target);
+  if (targetKind === 'other') return false;
+  const evaluatorKind = evaluationTargetKind(evaluator);
+  if (kind === 'self') return String(evaluator._id) === String(target._id);
+  if (kind === 'leader_peer') return evaluatorKind === 'leader' && targetKind === 'leader' && isSameAssignment(evaluator, assignment) && String(evaluator._id) !== String(target._id);
+  if (kind === 'volunteer_peer') return evaluatorKind === 'volunteer' && targetKind === 'volunteer' && isSameAssignment(evaluator, assignment) && String(evaluator._id) !== String(target._id);
+  if (kind === 'presidium_leader') return isPerformancePresidium(evaluator) && hasManagedAssignment(evaluator, assignment) && targetKind === 'leader';
+  if (kind === 'volunteer_leader') return evaluatorKind === 'volunteer' && isSameAssignment(evaluator, assignment) && targetKind === 'leader';
+  if (kind === 'leader_volunteer') return evaluatorKind === 'leader' && isSameAssignment(evaluator, assignment) && targetKind === 'volunteer';
+  return false;
+};
+
+const canViewPerformanceEvaluation = (viewer, target, assignment) => {
+  if (!viewer || !target || !isSameAssignment(target, assignment)) return false;
+  if (viewer.isUltimateAdmin) return true;
+  if (String(viewer._id) === String(target._id)) return true;
+  if (isPerformancePresidium(viewer) && hasManagedAssignment(viewer, assignment)) return true;
+  return isPerformanceLeader(viewer) && isSameAssignment(viewer, assignment) && evaluationTargetKind(target) === 'volunteer';
+};
+
+const serializePerformanceEvaluation = (item, viewer, target) => ({
+  id: item._id,
+  target: target ? serializeUser(target) : { id: item.target },
+  kind: item.kind,
+  kindLabel: PERFORMANCE_EVALUATION_KINDS[item.kind]?.label || item.kind,
+  score: item.score,
+  comment: item.comment || '',
+  anonymous: true,
+  evaluator: (viewer?.isUltimateAdmin || idOf(viewer) === idOf(item.evaluator))
+    ? (item.evaluator ? serializeUser(item.evaluator) : null)
+    : null,
+  createdAt: item.createdAt,
+  updatedAt: item.updatedAt
+});
+
 const hasSuperadminAccess = (user) => Boolean(user?.isUltimateAdmin || user?.role === 'superadmin');
 const hasUltimateAccess = (user) => Boolean(user?.isUltimateAdmin);
 const hasSievoxSemesterAccess = (user) => {
@@ -2475,37 +2574,27 @@ const ultimateOnly = (req, res, next) => {
   next();
 };
 
+const getFeedbackScopes = (user = {}) => {
+  if (user.isUltimateAdmin) return listDepartments();
+  const managed = getUserManagedDepartments(user);
+  if (isConsistentIdentity(user) && user.memberRole === 'volunteer' && user.organization === SIEVOX_DEPARTMENT.organization && user.department === SIEVOX_DEPARTMENT.department) managed.push(SIEVOX_DEPARTMENT);
+  return managed;
+};
 const buildDepartmentScopedQuery = (user) => {
   if (user.isUltimateAdmin) return {};
-  const managed = getUserManagedDepartments(user);
-  const unassignedFeedbackScope = [
-    { handlingOrganization: null },
-    { handlingOrganization: { $exists: false } },
-    { handlingDepartment: null },
-    { handlingDepartment: { $exists: false } }
-  ];
-  if (managed.length === 0) return { $or: unassignedFeedbackScope };
-  return {
-    $or: [
-      ...unassignedFeedbackScope,
-      ...managed.map(item => ({
-        handlingOrganization: item.organization,
-        handlingDepartment: item.department
-      }))
-    ]
-  };
+  const scopes = getFeedbackScopes(user);
+  const conditions = scopes.map(item => ({ handlingOrganization: item.organization, handlingDepartment: item.department }));
+  if (scopes.some(item => item.organization === SIEVOX_DEPARTMENT.organization && item.department === SIEVOX_DEPARTMENT.department)) conditions.push({ $or: [{ handlingOrganization: null }, { handlingDepartment: null }] });
+  return conditions.length ? { $or: conditions } : { _id: null };
 };
-
 const ensureFeedbackAccess = (user, feedback) => {
-  if (user.isUltimateAdmin) return true;
-  if (user.role === 'admin') return true;
-  if (user.role !== 'superadmin') return false;
-  if (!feedback.handlingOrganization || !feedback.handlingDepartment) return true;
-  return getUserManagedDepartments(user).some(item =>
-    item.organization === feedback.handlingOrganization &&
-    item.department === feedback.handlingDepartment
-  );
+  if (user?.isUltimateAdmin) return true;
+  const scopes = getFeedbackScopes(user);
+  const organization = feedback.handlingOrganization || SIEVOX_DEPARTMENT.organization;
+  const department = feedback.handlingDepartment || SIEVOX_DEPARTMENT.department;
+  return scopes.some(item => item.organization === organization && item.department === department);
 };
+const canReadFeedback = (user, feedback) => Boolean(idOf(user) === idOf(feedback.user) || (ensureFeedbackAccess(user, feedback) && (!feedback.isRevoked || user.isUltimateAdmin)));
 
 const buildUserDepartmentScopedQuery = (user) => {
   if (user.isUltimateAdmin) return {};
@@ -2529,8 +2618,11 @@ const getScopedVolunteerIds = async (user) => {
 
 const filterMembersByDepartmentScope = async (user, members = []) => {
   if (user.isUltimateAdmin) return members;
+  const managed = getUserManagedDepartments(user);
   const allowedIds = new Set(await getScopedVolunteerIds(user));
-  return members.filter(member => allowedIds.has(String(member._id)));
+  return members.filter(member => member.organization && member.department
+    ? managed.some(scope => isSameAssignment(member, scope))
+    : allowedIds.has(String(member._id)));
 };
 
 const ensureVolunteerDepartmentAccess = (user, volunteer) => {
@@ -2544,34 +2636,20 @@ const ensureVolunteerDepartmentAccess = (user, volunteer) => {
 
 const ensurePerformanceRecordAccess = (user, record) => {
   if (user.isUltimateAdmin) return true;
-  if (ensureVolunteerDepartmentAccess(user, record.volunteer)) return true;
   return getUserManagedDepartments(user).some(item =>
     item.organization === record.organization &&
     item.department === record.department
   );
 };
 
-const buildPerformanceSnapshot = async (userId, semesters = []) => {
-  const query = { volunteer: userId };
+const buildPerformanceSnapshot = async (userId, semesters = [], assignment = {}) => {
+  if (!userId || !isValidManagedDepartment(assignment)) return { total: 0, byDimension: {}, records: [], semesters, archivedAt: new Date() };
+  const query = { volunteer: userId, organization: assignment.organization, department: assignment.department };
   if (semesters.length > 0) query.semester = { $in: semesters };
-  const records = await PerformanceRecord.find(query)
-    .populate('recordedBy', 'name')
-    .sort({ occurrenceDate: -1, createdAt: -1 })
-    .lean();
-  const byDimension = {};
-  let total = 0;
-  records.forEach(record => {
-    const score = Number(record.score || 0);
-    total += score;
-    byDimension[record.dimension] = (byDimension[record.dimension] || 0) + score;
-  });
-  return {
-    total,
-    byDimension,
-    records,
-    semesters,
-    archivedAt: new Date()
-  };
+  const records = await loadPerformanceRecords(query);
+  const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne({ organization: assignment.organization, department: assignment.department }).lean(), assignment.organization, assignment.department);
+  const scores = calculatePerformance(records, policy);
+  return { ...scores, records, semesters, policy, archivedAt: new Date() };
 };
 
 const serializeCohort = (cohort) => ({
@@ -2656,7 +2734,7 @@ const isCurrentCohortMembership = (member = {}) => {
 
 const filterCohortMembershipsForDisplay = (members = [], cohort = null) => {
   if (!cohort || cohort.status === 'archived') return members;
-  return members.filter(isCurrentCohortMembership);
+  return members.filter(member => !member.endedAt && isCurrentCohortMembership(member));
 };
 
 const buildMemberSnapshot = (user) => ({
@@ -2747,6 +2825,218 @@ const buildIdentityUpdate = (input = {}, actorId = null) => {
 
   return { valid: true, update };
 };
+
+const { withOperationLock, compensate } = require('./standalone-writes');
+const withWriteLock = (key, task) => withOperationLock(OperationLock, key, task);
+const withWriteLocks = (keys, task) => {
+  const ordered = [...new Set(keys)].sort();
+  const enter = index => index < ordered.length ? withWriteLock(ordered[index], () => enter(index + 1)) : task();
+  return enter(0);
+};
+
+async function setAccountPassword(user, password) {
+  if (typeof password !== 'string' || password.length < 6) throw Object.assign(new Error('新密码至少6位'), { status: 400 });
+  return withWriteLock(`identity:${user._id}`, async () => {
+    const result = await User.findOneAndUpdate({ _id: user._id, isActive: true, $or: [{ tokenVersion: Number(user.tokenVersion || 0) }, { tokenVersion: { $exists: false } }] }, { $set: { password: await bcrypt.hash(password, 12), loginAttempts: 0, lockUntil: null }, $inc: { tokenVersion: 1 } }, { new: true });
+    if (!result) throw Object.assign(new Error('账号凭据已变化，请重新验证'), { status: 409 });
+    return result;
+  });
+}
+async function saveDepartmentIntroduction(req, publish) {
+  const assignment = { organization: req.params.organization, department: req.params.department };
+  return withWriteLock(`introduction:${assignment.organization}:${assignment.department}`, async () => {
+    const before = await DepartmentIntroduction.findOne(assignment).lean();
+    const baseVersion = Number(req.body.baseVersion);
+    if (!Number.isInteger(baseVersion) || baseVersion < 0) throw Object.assign(new Error('请提供当前草稿版本'), { status: 400 });
+    if (baseVersion !== (before?.draftVersion || 0)) throw Object.assign(new Error('草稿已更新，请刷新后再继续编辑'), { status: 409 });
+    const hasContent = Object.prototype.hasOwnProperty.call(req.body, 'content');
+    const content = hasContent ? normalizeIntroductionContent(req.body.content || {}, assignment) : before?.draftContent || before?.publishedContent || createDefaultDepartmentIntroduction(assignment.organization, assignment.department);
+    const update = { ...assignment, draftContent: content, draftVersion: baseVersion + 1, updatedBy: req.user._id, status: before?.publishedContent ? before.status : 'draft' };
+    if (publish) Object.assign(update, { publishedContent: content, publishedVersion: (before?.publishedVersion || 0) + 1, status: 'published', publishedBy: req.user._id, publishedAt: new Date() });
+    let intro;
+    await compensate(async () => {
+      try { intro = await DepartmentIntroduction.findOneAndUpdate({ ...assignment, ...(before ? { draftVersion: baseVersion } : {}) }, update, { upsert: !before, new: true, setDefaultsOnInsert: true }).lean(); }
+      catch (error) { if (error.code === 11000) throw Object.assign(new Error('草稿已更新，请刷新'), { status: 409 }); throw error; }
+      if (!intro) throw Object.assign(new Error('草稿已更新，请刷新'), { status: 409 });
+      if (publish) await DepartmentIntroductionRevision.create({ ...assignment, version: intro.publishedVersion, content: intro.publishedContent, action: 'publish', actor: req.user._id, reason: cleanText(req.body.reason, 160) });
+    }, async () => {
+      if (intro && before) await DepartmentIntroduction.replaceOne({ _id: intro._id, draftVersion: intro.draftVersion }, before);
+      else if (intro) await DepartmentIntroduction.deleteOne({ _id: intro._id, draftVersion: intro.draftVersion });
+    });
+    return intro;
+  });
+}
+
+
+const identityFields = ['role', 'memberRole', 'positionTitle', 'organization', 'department', 'managedDepartments', 'isUltimateAdmin', 'isActive', 'deactivatedAt', 'tokenVersion', 'activeCohortId', 'identityRevision', 'name', 'email', 'phone', 'studentId'];
+const identityValues = user => Object.fromEntries(identityFields.map(field => [field, user.toObject ? user.toObject()[field] : user[field]]).filter(([, value]) => value !== undefined));
+const sameIdentity = (a, b) => (a.role || a.systemRole) === (b.role || b.systemRole) && ['memberRole', 'positionTitle', 'organization', 'department'].every(field => (a[field] || null) === (b[field] || null)) && hasSameManagedDepartments(a.managedDepartments, b.managedDepartments);
+
+async function commitUserIdentity(user, update, actorId, options = {}) {
+  const lockingCohorts = await Cohort.find({ status: { $ne: 'archived' } }).lean();
+  const cohortKeys = [...lockingCohorts.map(cohort => `cohort:${cohort._id}`), ...(options.cohort ? [`cohort:${options.cohort._id}`] : [])];
+  return withWriteLocks(cohortKeys, () => withWriteLock(`identity:${user._id}`, async () => {
+    const current = await User.findById(user._id);
+    if (!current) throw new Error('账号不存在');
+    const before = identityValues(current);
+    const cohorts = await Cohort.find({ status: { $ne: 'archived' } }).lean();
+    const memberships = await CohortMembership.find({ user: current._id, cohort: { $in: cohorts.map(cohort => cohort._id) } }).lean();
+    if (cohorts.some(cohort => cohort.status === 'archiving' && memberships.some(member => idOf(member.cohort) === idOf(cohort)))) {
+      const error = new Error('该成员届次正在归档，请归档完成后重试'); error.status = 409; throw error;
+    }
+    const next = { ...before, ...update, identityRevision: Number(current.identityRevision || 0) + 1 };
+    const requestedCohort = options.cohort ? cohorts.find(cohort => idOf(cohort) === idOf(options.cohort)) : null;
+    if (options.cohort && (!requestedCohort || ['archiving', 'archived'].includes(requestedCohort.status))) throw Object.assign(new Error('届次已归档或正在归档，请刷新'), { status: 409 });
+    const targetCohort = requestedCohort || (next.memberRole !== 'student' && cohorts.filter(cohort => cohort.status === 'active' && lockingCohorts.some(locked => idOf(locked) === idOf(cohort))).sort((a, b) => new Date(b.startDate || b.createdAt) - new Date(a.startDate || a.createdAt))[0]);
+    next.activeCohortId = next.memberRole === 'student' ? null : targetCohort?._id || current.activeCohortId || null;
+    const memberBackups = memberships;
+    const rosterBackups = await SemesterMember.find({ volunteer: current._id }).lean();
+    let createdMemberId = null;
+    let applied = false;
+    await compensate(async () => {
+      const changed = await User.findOneAndUpdate({ _id: current._id, $or: [{ identityRevision: current.identityRevision || 0 }, { identityRevision: { $exists: false } }] }, { $set: next }, { new: true });
+      if (!changed) { const error = new Error('账号已变更，请刷新重试'); error.status = 409; throw error; }
+      applied = true;
+      for (const member of memberships) {
+        const history = member.appointmentHistory?.length ? [...member.appointmentHistory] : [{ memberRole: member.memberRole, positionTitle: member.positionTitle, organization: member.organization, department: member.department, startDate: member.createdAt }];
+        if (!sameIdentity(member, next) && history.length) {
+          history[history.length - 1] = { ...history[history.length - 1], endDate: new Date(), performanceSnapshot: await buildPerformanceSnapshot(current._id, cohorts.find(cohort => idOf(cohort) === idOf(member.cohort))?.semesters || [], member) };
+        }
+        const belongs = next.memberRole !== 'student' && idOf(member.cohort) === idOf(next.activeCohortId);
+        if (belongs && (!sameIdentity(member, next) || member.endedAt)) history.push({ memberRole: next.memberRole, positionTitle: next.positionTitle, organization: next.organization, department: next.department, startDate: new Date() });
+        const changes = belongs ? { accountSnapshot: buildMemberSnapshot(next), systemRole: next.role, memberRole: next.memberRole, positionTitle: next.positionTitle, organization: next.organization, department: next.department, managedDepartments: next.managedDepartments, endedAt: null, appointmentHistory: history } : { endedAt: member.endedAt || new Date(), appointmentHistory: history };
+        if (!belongs && !member.endedAt) changes.performanceSnapshot = await buildPerformanceSnapshot(current._id, cohorts.find(cohort => idOf(cohort) === idOf(member.cohort))?.semesters || [], member);
+        await CohortMembership.updateOne({ _id: member._id, archivedAt: null }, { $set: changes });
+      }
+      if (targetCohort && next.memberRole !== 'student' && !memberships.some(member => idOf(member.cohort) === idOf(targetCohort))) {
+        const member = await CohortMembership.create({ cohort: targetCohort._id, user: current._id, accountSnapshot: buildMemberSnapshot(next), systemRole: next.role, memberRole: next.memberRole, positionTitle: next.positionTitle, organization: next.organization, department: next.department, managedDepartments: next.managedDepartments, appointmentHistory: [{ memberRole: next.memberRole, positionTitle: next.positionTitle, organization: next.organization, department: next.department, startDate: options.appointmentStart || new Date(), endDate: options.appointmentEnd }] });
+        createdMemberId = member._id;
+      }
+      const currentSemester = await getCurrentSemesterName();
+      if (next.memberRole !== 'volunteer' || !isSameAssignment(before, next)) await SemesterMember.updateMany({ volunteer: current._id, semester: currentSemester, organization: before.organization, department: before.department }, { $set: { isActive: false, endedAt: new Date() } });
+      else await SemesterMember.updateMany({ volunteer: current._id, semester: currentSemester, organization: next.organization, department: next.department }, { $set: { name: next.name, studentId: next.studentId } });
+      Object.assign(user, next);
+    }, async () => {
+      if (createdMemberId) await CohortMembership.deleteOne({ _id: createdMemberId });
+      for (const member of memberBackups) await CohortMembership.replaceOne({ _id: member._id }, member);
+      for (const roster of rosterBackups) await SemesterMember.replaceOne({ _id: roster._id }, roster);
+      if (applied) await User.updateOne({ _id: current._id, identityRevision: next.identityRevision }, { $set: before });
+      if (options.newlyCreated) await User.deleteOne({ _id: current._id, identityRevision: before.identityRevision || 0 });
+    });
+    return targetCohort ? CohortMembership.findOne({ cohort: targetCohort._id, user: current._id }).populate('user', 'name studentId email phone') : null;
+  }));
+}
+
+async function replaceRoster(query, users, actorId) {
+  return withWriteLock(`performance:${query.semester}`, async () => {
+    const previous = await SemesterMember.find(query).lean();
+    const oldManaged = await SystemConfig.findOne({ key: 'rosterManagedSemesters' }).lean();
+    await compensate(async () => {
+      for (const user of users) await SemesterMember.updateOne({ semester: query.semester, volunteer: user._id, organization: user.organization, department: user.department }, { $set: { originalUserId: user._id, name: user.name, studentId: user.studentId, addedBy: actorId, isActive: true, endedAt: null } }, { upsert: true });
+      await markSemesterManaged(query.semester);
+      await SemesterMember.deleteMany({ $and: [query, { volunteer: { $nin: users.map(user => user._id) } }] });
+    }, async () => {
+      await SemesterMember.deleteMany(query);
+      if (previous.length) await SemesterMember.insertMany(previous);
+      if (oldManaged) await SystemConfig.replaceOne({ key: oldManaged.key }, oldManaged, { upsert: true });
+      else await SystemConfig.deleteOne({ key: 'rosterManagedSemesters' });
+    });
+  });
+}
+
+
+async function createPerformanceRecords(actor, payload, assignment = null) {
+  const ids = [...new Set((Array.isArray(payload.volunteerIds) ? payload.volunteerIds : []).map(String))];
+  const bad = message => { throw Object.assign(new Error(message), { status: 400 }); };
+  if (!ids.length || ids.some(id => !mongoose.Types.ObjectId.isValid(id))) bad('请选择有效成员');
+  const score = Number(payload.score);
+  if (!Number.isFinite(score) || score <= 0) bad('请输入有效的正加分');
+  const reason = sanitizeInput(payload.reason || '');
+  if (!reason) bad('请填写加分事由');
+  const occurrenceDate = payload.occurrenceDate ? new Date(payload.occurrenceDate) : new Date();
+  if (Number.isNaN(occurrenceDate.getTime())) bad('发生日期无效');
+  const dimension = sanitizeInput(payload.dimension || '');
+  const semester = sanitizeInput(payload.targetSemester || '') || await getCurrentSemesterName();
+  return withWriteLock(`performance:${semester}`, async () => {
+    const users = await User.find({ _id: { $in: ids }, memberRole: 'volunteer', role: 'admin', positionTitle: 'volunteer', isActive: true, ...(assignment || {}) }).lean();
+    if (users.length !== ids.length) bad('成员不在该部门有效名单中');
+    const rows = [];
+    for (const user of users) {
+      const scope = { organization: user.organization, department: user.department };
+      if (!isValidManagedDepartment(scope) || !(actor.isUltimateAdmin || getUserManagedDepartments(actor).some(item => isSameAssignment(item, scope)))) throw Object.assign(new Error('无权录入该部门绩效'), { status: 403 });
+      const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne(scope).lean(), scope.organization, scope.department);
+      if (!policy.dimensions.some(item => item.key === dimension)) bad('绩效维度无效');
+      if (!await SemesterMember.exists({ semester, volunteer: user._id, ...scope, isActive: { $ne: false } })) bad('请先将成员加入本学期绩效名单');
+      rows.push({ volunteer: user._id, recordedBy: actor._id, ...scope, semester, dimension, score, reason, occurrenceDate, activityName: sanitizeInput(payload.activityName || '') });
+    }
+    const planned = rows.map(row => ({ ...row, _id: new mongoose.Types.ObjectId() }));
+    await compensate(() => PerformanceRecord.insertMany(planned), () => PerformanceRecord.deleteMany({ _id: { $in: planned.map(row => row._id) } }));
+    return planned;
+  });
+}
+
+async function loadPerformanceRecords(query = {}) {
+  if (query._id === null) return [];
+  const records = await PerformanceRecord.find(query).populate('volunteer', 'name studentId organization department').populate('recordedBy', 'name').sort({ occurrenceDate: -1, createdAt: -1 }).lean();
+  const calibrationQuery = Object.fromEntries(['semester', 'organization', 'department', 'dimension'].filter(key => query[key] !== undefined).map(key => [key, query[key]]));
+  if (query.$or) calibrationQuery.$or = query.$or;
+  const calibrations = await PerformanceCalibration.find(calibrationQuery).populate('values.volunteer', 'name studentId organization department').populate('recordedBy', 'name').lean();
+  const matchesVolunteer = value => !query.volunteer || (query.volunteer.$in ? query.volunteer.$in.map(idOf).includes(idOf(value)) : idOf(value) === idOf(query.volunteer));
+  for (const calibration of calibrations) for (const value of calibration.values || []) {
+    if (!matchesVolunteer(value.volunteer) || !value.score) continue;
+    records.push({ ...calibration, id: `${calibration._id}:${idOf(value.volunteer)}`, _id: `${calibration._id}:${idOf(value.volunteer)}`, volunteer: value.volunteer, score: value.score, reason: '维度成绩校准', isCalibration: true, occurrenceDate: calibration.updatedAt, createdAt: calibration.updatedAt });
+  }
+  return records;
+}
+
+async function archiveCohort(cohortId, actorId) {
+  return withWriteLock(`cohort:${cohortId}`, async () => {
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) { const error = new Error('届次不存在'); error.status = 404; throw error; }
+    if (cohort.status === 'archived') return { cohort, archivedMembers: await CohortMembership.countDocuments({ cohort: cohort._id }) };
+    if (!cohort.semesters?.length) throw Object.assign(new Error('请先为届次选择绩效学期，再进行归档'), { status: 400 });
+    return withWriteLocks(cohort.semesters.map(semester => `performance:${semester}`), async () => {
+    cohort.status = 'archiving'; cohort.archiveStartedAt = cohort.archiveStartedAt || new Date(); await cohort.save();
+    const members = await CohortMembership.find({ cohort: cohort._id }).populate('user');
+    for (const member of members) {
+      if (!member.archivedAt) {
+        if (member.user && !member.endedAt) member.accountSnapshot = buildMemberSnapshot(member.user);
+        if (!member.endedAt || !member.performanceSnapshot?.archivedAt) member.performanceSnapshot = await buildPerformanceSnapshot(member.user?._id || member.user, cohort.semesters || [], member);
+        member.archivedAt = new Date(); member.archivedBy = actorId; await member.save();
+      }
+      if (member.user && !member.user.isUltimateAdmin && !member.endedAt && isCurrentCohortMembership(member)) {
+        await withWriteLock(`identity:${member.user._id}`, async () => {
+          const query = { _id: member.user._id, role: member.user.role, memberRole: member.memberRole, positionTitle: member.positionTitle, organization: member.organization, department: member.department, isUltimateAdmin: { $ne: true }, $or: [{ activeCohortId: cohort._id }, { activeCohortId: null }] };
+          // A newer current term always wins over this archived term, including legacy users without activeCohortId.
+          const newer = await CohortMembership.exists({ user: member.user._id, cohort: { $ne: cohort._id }, endedAt: null, archivedAt: null, memberRole: member.user.memberRole, positionTitle: member.user.positionTitle, organization: member.user.organization, department: member.user.department });
+          if (!newer) await User.updateOne(query, { $set: { ...buildIdentityUpdate({ memberRole: 'student', positionTitle: 'student' }).update, activeCohortId: null }, $inc: { identityRevision: 1 } });
+        });
+      }
+    }
+    const ordered = [...members].sort((a, b) => (b.performanceSnapshot?.total || 0) - (a.performanceSnapshot?.total || 0));
+    for (let index = 0; index < ordered.length; index++) await CohortMembership.updateOne({ _id: ordered[index]._id }, { $set: { 'performanceSnapshot.rank': index + 1 } });
+    cohort.status = 'archived'; cohort.archivedAt = new Date(); cohort.archivedBy = actorId; await cohort.save();
+    return { cohort, archivedMembers: members.length };
+    });
+  });
+}
+
+async function validateOwnedAttachments(user, attachments = []) {
+  if (!Array.isArray(attachments) || attachments.length > 10) throw Object.assign(new Error('附件列表无效'), { status: 400 });
+  const result = [];
+  for (const attachment of attachments) {
+    const upload = await PrivateUpload.findOne({ owner: user._id, path: attachment.path });
+    if (!upload) throw Object.assign(new Error('附件不存在或不属于当前账号，请重新上传'), { status: 403 });
+    result.push({ filename: upload.originalName, path: upload.path, mimetype: upload.mimetype });
+  }
+  return result;
+}
+
+async function feedbackSummary(query) {
+  const counts = await Feedback.aggregate([{ $match: query }, { $group: { _id: null, total: { $sum: 1 }, pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } }, processing: { $sum: { $cond: [{ $eq: ['$status', 'processing'] }, 1, 0] } }, resolved: { $sum: { $cond: [{ $eq: ['$status', 'resolved'] }, 1, 0] } }, rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } }, high: { $sum: { $cond: [{ $in: ['$priority', ['high', 'urgent']] }, 1, 0] } } } }]);
+  return counts[0] || { total: 0, pending: 0, processing: 0, resolved: 0, rejected: 0, high: 0 };
+}
+
 
 // ============================================
 // API 路由
@@ -2973,6 +3263,94 @@ app.get('/api/hub/notices', authenticate, async (req, res) => {
   }
 });
 
+const canManageNewsNotice = (user, notice) => {
+  if (hasUltimateAccess(user)) return true;
+  if (!notice?.organization || !notice?.department || notice.department === 'default') return false;
+  const access = getDepartmentNoticeAccess(user, {
+    organization: notice.organization,
+    department: notice.department
+  });
+  return Boolean(access?.canEdit);
+};
+
+app.get('/api/hub/hero', authenticate, async (req, res) => {
+  const organization = req.query.organization;
+  const department = req.query.department || 'default';
+  if (organization && department !== 'default' && !isValidManagedDepartment({ organization, department })) {
+    return res.status(404).json({ success: false, message: '部门模块不存在' });
+  }
+  try {
+    const query = { status: 'published', heroEnabled: true };
+    if (organization) query.organization = organization;
+    if (department) query.department = department;
+    const heroNews = await DepartmentNotice.find(query)
+      .sort({ heroOrder: 1, publishedAt: -1, updatedAt: -1 })
+      .limit(8)
+      .populate('createdBy updatedBy publishedBy', 'name studentId')
+      .lean();
+    const noticeQuery = { status: 'published', source: 'manual' };
+    if (organization) noticeQuery.organization = organization;
+    if (department && department !== 'default') noticeQuery.department = department;
+    const notices = await DepartmentNotice.find(noticeQuery)
+      .sort({ publishedAt: -1, updatedAt: -1 })
+      .limit(8)
+      .populate('createdBy updatedBy publishedBy', 'name studentId')
+      .lean();
+    const newsQuery = { status: 'published', source: 'wechat_mp' };
+    if (organization) newsQuery.organization = organization;
+    if (department && department !== 'default') newsQuery.department = department;
+    const news = await DepartmentNotice.find(newsQuery)
+      .sort({ publishedAt: -1, updatedAt: -1 })
+      .limit(20)
+      .lean();
+    res.json({ success: true, hero: heroNews.map(serializeDepartmentNotice), news: news.map(serializeDepartmentNotice), notices: notices.map(serializeDepartmentNotice) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: '获取部门 Hero 新闻失败' });
+  }
+});
+
+app.get('/api/hub/admin/news', authenticate, async (req, res) => {
+  if (!hasUltimateAccess(req.user)) return res.status(403).json({ success: false, message: '仅终极管理员可管理全部新闻' });
+  try {
+    const query = {};
+    if (['manual', 'wechat_mp'].includes(req.query.source)) query.source = req.query.source;
+    const notices = await DepartmentNotice.find(query)
+      .sort({ publishedAt: -1, updatedAt: -1 })
+      .limit(resolveNoticeListLimit(req.query.limit, 200, 500) || 500)
+      .populate('createdBy updatedBy publishedBy', 'name studentId')
+      .lean();
+    res.json({ success: true, notices: notices.map(serializeDepartmentNotice), departments: listDepartments().concat([{ organization: 'student_union', department: 'default', organizationLabel: '默认', departmentLabel: '默认' }]) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: '获取新闻管理数据失败' });
+  }
+});
+
+app.patch('/api/hub/admin/news/:id', authenticate, async (req, res) => {
+  try {
+    const existing = await DepartmentNotice.findById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: '新闻不存在' });
+    if (!canManageNewsNotice(req.user, existing)) return res.status(403).json({ success: false, message: '无权管理该新闻' });
+    const payload = normalizeNoticePayload(req.body || {}, existing);
+    if (!payload.title.zh && !payload.title.en) return res.status(400).json({ success: false, message: '请填写新闻标题' });
+    const nextOrganization = cleanText(req.body?.organization ?? existing.organization, 80);
+    const nextAssignment = { organization: nextOrganization, department: payload.department };
+    if (payload.department !== 'default' && !isValidManagedDepartment(nextAssignment)) {
+      return res.status(400).json({ success: false, message: '新闻归属部门无效' });
+    }
+    if ((payload.department !== existing.department || nextOrganization !== existing.organization) && !hasUltimateAccess(req.user)) {
+      return res.status(403).json({ success: false, message: '部门负责人不能跨部门调整新闻归属' });
+    }
+    Object.assign(existing, payload, { organization: nextOrganization, updatedBy: req.user._id });
+    if (payload.status === 'published' && existing.isModified('status')) existing.publishedBy = req.user._id;
+    await existing.save();
+    await existing.populate('createdBy updatedBy publishedBy', 'name studentId');
+    await logAction(req.user._id, 'manage_hub_news', 'departmentNotice', existing._id, { department: existing.department, heroEnabled: existing.heroEnabled }, req);
+    res.json({ success: true, notice: serializeDepartmentNotice(existing) });
+  } catch (error) {
+    res.status(error?.code === 11000 ? 409 : 500).json({ success: false, message: error?.message || '更新新闻失败' });
+  }
+});
+
 app.get('/api/hub/departments/:organization/:department/notices', authenticate, async (req, res) => {
   const assignment = { organization: req.params.organization, department: req.params.department };
   if (!isValidManagedDepartment(assignment)) return res.status(404).json({ success: false, message: '部门模块不存在' });
@@ -3079,8 +3457,8 @@ app.post('/api/hub/departments/:organization/:department/notices', authenticate,
 
   try {
     const notice = await DepartmentNotice.create({
-      ...assignment,
       ...payload,
+      ...assignment,
       createdBy: req.user._id,
       updatedBy: req.user._id,
       publishedBy: payload.status === 'published' ? req.user._id : undefined
@@ -3103,6 +3481,7 @@ app.patch('/api/hub/departments/:organization/:department/notices/:id', authenti
     if (!existing) return res.status(404).json({ success: false, message: '部门通知不存在' });
     const payload = normalizeNoticePayload(req.body || {}, existing);
     if (!payload.title.zh && !payload.title.en) return res.status(400).json({ success: false, message: '请填写通知标题' });
+    payload.department = assignment.department;
 
     Object.assign(existing, payload, { updatedBy: req.user._id });
     if (payload.status === 'published' && existing.isModified('status')) existing.publishedBy = req.user._id;
@@ -3324,110 +3703,25 @@ app.get('/api/hub/departments/:organization/:department/introduction/editor', au
 });
 
 app.put('/api/hub/departments/:organization/:department/introduction/draft', authenticate, async (req, res) => {
-  const assignment = {
-    organization: req.params.organization,
-    department: req.params.department
-  };
-  if (!isValidManagedDepartment(assignment)) {
-    return res.status(404).json({ success: false, message: '部门模块不存在' });
-  }
-
+  const assignment = { organization: req.params.organization, department: req.params.department };
   const access = getDepartmentIntroductionAccess(req.user, assignment);
-  if (!access?.canEdit) {
-    return res.status(403).json({ success: false, message: '当前身份不能编辑该部门介绍页' });
-  }
-
+  if (!access?.canEdit) return res.status(403).json({ success: false, message: '当前身份不能编辑或发布该部门介绍' });
   try {
-    const existing = await DepartmentIntroduction.findOne(assignment).lean();
-    const baseVersion = Number(req.body?.baseVersion ?? existing?.draftVersion ?? 0);
-    if (existing && Number.isFinite(baseVersion) && baseVersion !== existing.draftVersion) {
-      return res.status(409).json({
-        success: false,
-        message: '草稿已被其他成员更新，请刷新后再继续编辑',
-        currentVersion: existing.draftVersion
-      });
-    }
-
-    const draftContent = normalizeIntroductionContent(req.body?.content || {}, assignment);
-    const intro = await DepartmentIntroduction.findOneAndUpdate(
-      assignment,
-      {
-        ...assignment,
-        draftContent,
-        status: existing?.publishedContent ? existing.status : 'draft',
-        draftVersion: (existing?.draftVersion || 0) + 1,
-        updatedBy: req.user._id
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).lean();
-
+    const intro = await saveDepartmentIntroduction(req, false);
     await logAction(req.user._id, 'save_department_introduction_draft', 'departmentIntroduction', intro._id, assignment, req);
-    res.json({
-      success: true,
-      message: '部门介绍草稿已保存',
-      introduction: serializeDepartmentIntroduction(intro, assignment, 'editor'),
-      access
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '保存部门介绍草稿失败' });
-  }
+    res.json({ success: true, introduction: serializeDepartmentIntroduction(intro, assignment, 'editor'), access, message: '部门介绍已保存' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '保存部门介绍失败' }); }
 });
 
 app.post('/api/hub/departments/:organization/:department/introduction/publish', authenticate, async (req, res) => {
-  const assignment = {
-    organization: req.params.organization,
-    department: req.params.department
-  };
-  if (!isValidManagedDepartment(assignment)) {
-    return res.status(404).json({ success: false, message: '部门模块不存在' });
-  }
-
+  const assignment = { organization: req.params.organization, department: req.params.department };
   const access = getDepartmentIntroductionAccess(req.user, assignment);
-  if (!access?.canPublish) {
-    return res.status(403).json({ success: false, message: '当前身份不能发布该部门介绍页' });
-  }
-
+  if (!access?.canPublish) return res.status(403).json({ success: false, message: '当前身份不能编辑或发布该部门介绍' });
   try {
-    const existing = await DepartmentIntroduction.findOne(assignment).lean();
-    const hasIncomingContent = Object.prototype.hasOwnProperty.call(req.body || {}, 'content');
-    const contentToPublish = hasIncomingContent
-      ? normalizeIntroductionContent(req.body.content || {}, assignment)
-      : (existing?.draftContent || existing?.publishedContent || createDefaultDepartmentIntroduction(assignment.organization, assignment.department));
-
-    const intro = await DepartmentIntroduction.findOneAndUpdate(
-      assignment,
-      {
-        ...assignment,
-        draftContent: contentToPublish,
-        draftVersion: (existing?.draftVersion || 0) + (hasIncomingContent ? 1 : 0),
-        publishedContent: contentToPublish,
-        publishedVersion: (existing?.publishedVersion || 0) + 1,
-        status: 'published',
-        updatedBy: req.user._id,
-        publishedBy: req.user._id,
-        publishedAt: new Date()
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).lean();
-
-    await DepartmentIntroductionRevision.create({
-      ...assignment,
-      version: intro.publishedVersion,
-      content: intro.publishedContent,
-      action: 'publish',
-      actor: req.user._id,
-      reason: cleanText(req.body?.reason, 160)
-    });
-    await logAction(req.user._id, 'publish_department_introduction', 'departmentIntroduction', intro._id, { ...assignment, version: intro.publishedVersion }, req);
-    res.json({
-      success: true,
-      message: '部门介绍页已发布',
-      introduction: serializeDepartmentIntroduction(intro, assignment, 'editor'),
-      access
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '发布部门介绍页失败' });
-  }
+    const intro = await saveDepartmentIntroduction(req, true);
+    await logAction(req.user._id, 'publish_department_introduction', 'departmentIntroduction', intro._id, assignment, req);
+    res.json({ success: true, introduction: serializeDepartmentIntroduction(intro, assignment, 'editor'), access, message: '部门介绍已保存' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '保存部门介绍失败' }); }
 });
 
 app.post('/api/hub/departments/:organization/:department/introduction/media', authenticate, departmentIntroUpload.single('file'), async (req, res) => {
@@ -3599,47 +3893,52 @@ app.get('/api/hub/departments/:organization/:department/performance-workbench', 
   }
 
   const access = getDepartmentPerformanceAccess(req.user, assignment);
-  if (!access) {
-    return res.status(403).json({ success: false, message: '当前身份不能管理该部门绩效' });
+  const participationAccess = getDepartmentCapabilityAccess(req.user, assignment, 'participate');
+  if (!access && !participationAccess) {
+    return res.status(403).json({ success: false, message: '当前身份不能访问该部门绩效' });
   }
 
   try {
     const currentSemester = await getCurrentSemesterName();
     const semester = sanitizeInput(req.query.semester) || currentSemester;
+    const volunteerScope = access ? {} : { _id: req.user._id };
     const volunteers = await User.find({
       memberRole: 'volunteer',
       organization: assignment.organization,
       department: assignment.department,
-      isActive: true
+      isActive: true,
+      ...volunteerScope
     }).select('-password').sort({ studentId: 1 });
+    const assessmentLeaders = access ? (await User.find({
+      memberRole: 'department_lead',
+      organization: assignment.organization,
+      department: assignment.department,
+      isActive: true
+    }).select('name memberRole positionTitle organization department role').lean()).filter(isConsistentIdentity) : [];
     const volunteerIds = volunteers.map(user => user._id);
     const rosterDocs = await SemesterMember.find({
       semester,
+      organization: assignment.organization, department: assignment.department, isActive: { $ne: false },
       volunteer: { $in: volunteerIds }
     }).populate('volunteer', 'name studentId email phone role memberRole positionTitle organization department').lean();
-    const records = await PerformanceRecord.find({
-      semester,
-      organization: assignment.organization,
-      department: assignment.department
-    })
-      .populate('volunteer', 'name studentId organization department')
-      .populate('recordedBy', 'name')
-      .sort({ occurrenceDate: -1, createdAt: -1 })
-      .lean();
+    const records = await loadPerformanceRecords({ semester, organization: assignment.organization, department: assignment.department, ...(access ? {} : { volunteer: req.user._id }) });
     const policyDoc = await DepartmentPerformancePolicy.findOne(assignment).populate('updatedBy', 'name studentId').lean();
-    const recordSemesters = await PerformanceRecord.find({
-      organization: assignment.organization,
-      department: assignment.department
-    }).distinct('semester');
-    const semesters = Array.from(new Set([currentSemester, semester, ...recordSemesters].filter(Boolean)));
+    const periodScope = { organization: assignment.organization, department: assignment.department };
+    const [recordSemesters, rosterSemesters, evaluationSemesters] = await Promise.all([
+      PerformanceRecord.distinct('semester', periodScope),
+      SemesterMember.distinct('semester', periodScope),
+      PerformanceEvaluation.distinct('semester', periodScope)
+    ]);
+    const semesters = Array.from(new Set([currentSemester, semester, ...recordSemesters, ...rosterSemesters, ...evaluationSemesters].filter(Boolean)));
 
     res.json({
       success: true,
-      access,
+      access: access || participationAccess,
       currentSemester,
       semester,
       semesters,
       volunteers: volunteers.map(serializeUser),
+      assessmentLeaders: assessmentLeaders.map(user => ({ id: user._id, name: user.name, memberRole: user.memberRole, positionTitle: user.positionTitle })),
       roster: rosterDocs.map(doc => doc.volunteer ? serializeUser(doc.volunteer) : null).filter(Boolean),
       records: records.map(serializeDepartmentPerformanceRecord),
       policy: serializeDepartmentPerformancePolicy(policyDoc, assignment.organization, assignment.department)
@@ -3678,18 +3977,9 @@ app.put('/api/hub/departments/:organization/:department/performance-roster', aut
       return res.status(403).json({ success: false, message: '只能添加该部门内的志愿者账号' });
     }
 
-    await SemesterMember.deleteMany({ semester, volunteer: { $in: Array.from(allowedIds) } });
     const selectedVolunteers = departmentVolunteers.filter(user => requestedIds.includes(user._id.toString()));
-    if (selectedVolunteers.length > 0) {
-      await SemesterMember.insertMany(selectedVolunteers.map(user => ({
-        volunteer: user._id,
-        semester,
-        name: user.name,
-        studentId: user.studentId,
-        addedBy: req.user._id
-      })));
-    }
-    await markSemesterManaged(semester);
+    selectedVolunteers.forEach(user => { user.organization = assignment.organization; user.department = assignment.department; });
+    await replaceRoster({ semester, organization: assignment.organization, department: assignment.department }, selectedVolunteers, req.user._id);
     await logAction(req.user._id, 'update_department_performance_roster', 'semesterMember', req.user._id, { ...assignment, semester, count: selectedVolunteers.length }, req);
     res.json({ success: true, message: '部门成员名单已保存' });
   } catch (error) {
@@ -3698,73 +3988,13 @@ app.put('/api/hub/departments/:organization/:department/performance-roster', aut
 });
 
 app.post('/api/hub/departments/:organization/:department/performance-records', authenticate, async (req, res) => {
-  const assignment = {
-    organization: req.params.organization,
-    department: req.params.department
-  };
-  if (!isValidManagedDepartment(assignment)) {
-    return res.status(404).json({ success: false, message: '部门模块不存在' });
-  }
-
-  const access = getDepartmentPerformanceAccess(req.user, assignment);
-  if (!access) {
-    return res.status(403).json({ success: false, message: '当前身份不能录入该部门绩效' });
-  }
-
   try {
-    const semester = sanitizeInput(req.body.targetSemester) || await getCurrentSemesterName();
-    const volunteerIds = Array.from(new Set((Array.isArray(req.body.volunteerIds) ? req.body.volunteerIds : []).map(String).filter(Boolean)));
-    if (volunteerIds.length === 0) return res.status(400).json({ success: false, message: '请选择成员' });
-    const policy = serializeDepartmentPerformancePolicy(
-      await DepartmentPerformancePolicy.findOne(assignment).lean(),
-      assignment.organization,
-      assignment.department
-    );
-    const dimension = sanitizeInput(req.body.dimension);
-    if (!policy.dimensions.some(item => item.key === dimension)) {
-      return res.status(400).json({ success: false, message: '绩效维度无效' });
-    }
-    const score = Number(req.body.score);
-    if (!Number.isFinite(score) || score <= 0) {
-      return res.status(400).json({ success: false, message: '请输入有效加分' });
-    }
-    const reason = sanitizeInput(req.body.reason);
-    if (!reason) return res.status(400).json({ success: false, message: '请填写加分事由' });
-
-    const targetVolunteers = await User.find({
-      _id: { $in: volunteerIds },
-      memberRole: 'volunteer',
-      organization: assignment.organization,
-      department: assignment.department,
-      isActive: true
-    }).select('organization department');
-    if (targetVolunteers.length !== volunteerIds.length) {
-      return res.status(403).json({ success: false, message: '只能为该部门志愿者录入绩效' });
-    }
-    const rosterCount = await SemesterMember.countDocuments({ semester, volunteer: { $in: volunteerIds } });
-    if (rosterCount !== volunteerIds.length) {
-      return res.status(400).json({ success: false, message: '请先将成员加入本学期绩效名单' });
-    }
-
-    const occurrenceDate = req.body.occurrenceDate ? new Date(req.body.occurrenceDate) : new Date();
-    const records = volunteerIds.map(volunteerId => ({
-      volunteer: volunteerId,
-      recordedBy: req.user._id,
-      dimension,
-      score,
-      reason,
-      occurrenceDate,
-      activityName: sanitizeInput(req.body.activityName) || '',
-      organization: assignment.organization,
-      department: assignment.department,
-      semester
-    }));
-    await PerformanceRecord.insertMany(records);
-    await logAction(req.user._id, 'create_department_performance_records', 'performanceRecord', req.user._id, { ...assignment, semester, count: records.length, dimension, score }, req);
+    const assignment = req.params.organization ? { organization: req.params.organization, department: req.params.department } : null;
+    if (assignment && !getDepartmentPerformanceAccess(req.user, assignment)) return res.status(403).json({ success: false, message: '当前身份不能录入该部门绩效' });
+    const records = await createPerformanceRecords(req.user, req.body, assignment);
+    await logAction(req.user._id, 'create_performance_records', 'performanceRecord', req.user._id, { count: records.length }, req);
     res.json({ success: true, message: '绩效录入成功' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '录入部门绩效失败' });
-  }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '绩效录入失败' }); }
 });
 
 app.delete('/api/hub/departments/:organization/:department/performance-records/:id', authenticate, async (req, res) => {
@@ -3788,11 +4018,73 @@ app.delete('/api/hub/departments/:organization/:department/performance-records/:
       department: assignment.department
     });
     if (!record) return res.status(404).json({ success: false, message: '记录不存在' });
-    await record.deleteOne();
+    await withWriteLock(`performance:${record.semester}`, () => record.deleteOne());
     await logAction(req.user._id, 'delete_department_performance_record', 'performanceRecord', req.params.id, assignment, req);
     res.json({ success: true, message: '绩效记录已撤回' });
   } catch (error) {
     res.status(500).json({ success: false, message: '撤回部门绩效失败' });
+  }
+});
+
+app.get('/api/hub/departments/:organization/:department/performance-evaluations', authenticate, async (req, res) => {
+  const assignment = { organization: req.params.organization, department: req.params.department };
+  if (!isValidManagedDepartment(assignment)) return res.status(404).json({ success: false, message: '部门模块不存在' });
+  const semester = sanitizeInput(req.query.semester) || await getCurrentSemesterName();
+  const targetId = sanitizeInput(req.query.targetId);
+  try {
+    const targetQuery = { organization: assignment.organization, department: assignment.department, isActive: true, ...(targetId ? { _id: targetId } : {}) };
+    const targetUsers = (await User.find(targetQuery).select('-password').lean())
+      .filter(target => ['volunteer', 'department_lead'].includes(target.memberRole) && isConsistentIdentity(target));
+    const targetMap = new Map(targetUsers.map(user => [String(user._id), user]));
+    const allowedTargets = targetUsers.filter(target => canViewPerformanceEvaluation(req.user, target, assignment));
+    const canParticipate = targetUsers.some(target => Object.keys(PERFORMANCE_EVALUATION_KINDS).some(kind => canSubmitPerformanceEvaluation(req.user, target, kind, assignment)));
+    if (allowedTargets.length === 0 && !canParticipate && !getDepartmentPerformanceAccess(req.user, assignment)) return res.status(403).json({ success: false, message: '当前身份不能访问这些评价' });
+    const evaluations = await PerformanceEvaluation.find({
+      organization: assignment.organization,
+      department: assignment.department,
+      semester,
+      target: { $in: allowedTargets.map(target => target._id) }
+    }).populate('evaluator', '-password').sort({ createdAt: -1 }).lean();
+    const serialized = evaluations.map(item => serializePerformanceEvaluation(item, req.user, targetMap.get(String(item.target))));
+    const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne(assignment).lean(), assignment.organization, assignment.department);
+    const summary = summarizeEvaluations(serialized, policy, PERFORMANCE_EVALUATION_KINDS);
+    const targets = targetUsers.map(target => ({
+      id: target._id, _id: target._id, name: target.name, positionTitle: target.positionTitle,
+      allowedKinds: Object.keys(PERFORMANCE_EVALUATION_KINDS).filter(kind => canSubmitPerformanceEvaluation(req.user, target, kind, assignment))
+    })).filter(target => target.allowedKinds.length);
+    const allowedKinds = Object.keys(PERFORMANCE_EVALUATION_KINDS).filter(kind => targetUsers.some(target => canSubmitPerformanceEvaluation(req.user, target, kind, assignment)));
+    res.json({ success: true, semester, weights: PERFORMANCE_EVALUATION_KINDS, evaluationWeights: policy.evaluationWeights, allowedKinds, targets, evaluations: serialized, summary });
+  } catch (error) {
+    res.status(500).json({ success: false, message: '获取评价记录失败' });
+  }
+});
+
+app.post('/api/hub/departments/:organization/:department/performance-evaluations', authenticate, async (req, res) => {
+  const assignment = { organization: req.params.organization, department: req.params.department };
+  if (!isValidManagedDepartment(assignment)) return res.status(404).json({ success: false, message: '部门模块不存在' });
+  const targetId = sanitizeInput(req.body.targetId);
+  const kind = sanitizeInput(req.body.kind);
+  const score = Number(req.body.score);
+  const comment = sanitizeInput(req.body.comment || '');
+  const semester = sanitizeInput(req.body.semester) || await getCurrentSemesterName();
+  if (!targetId || !PERFORMANCE_EVALUATION_KINDS[kind] || !Number.isFinite(score) || score < 0 || score > 100) {
+    return res.status(400).json({ success: false, message: '评价对象、类型或分数无效' });
+  }
+  try {
+    const target = await User.findOne({ _id: targetId, organization: assignment.organization, department: assignment.department, isActive: true }).select('-password');
+    if (!target) return res.status(404).json({ success: false, message: '评价对象不存在或不属于该部门' });
+    if (!canSubmitPerformanceEvaluation(req.user, target, kind, assignment)) {
+      return res.status(403).json({ success: false, message: '当前身份不能提交此类评价' });
+    }
+    const evaluation = await PerformanceEvaluation.findOneAndUpdate(
+      { target: target._id, evaluator: req.user._id, semester, kind },
+      { target: target._id, evaluator: req.user._id, organization: assignment.organization, department: assignment.department, semester, kind, score, comment, anonymous: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).populate('evaluator', '-password');
+    await logAction(req.user._id, 'upsert_performance_evaluation', 'performanceEvaluation', evaluation._id, { ...assignment, semester, targetId, kind }, req);
+    res.json({ success: true, evaluation: serializePerformanceEvaluation(evaluation, req.user, target) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: '保存评价失败' });
   }
 });
 
@@ -3850,7 +4142,7 @@ app.get('/api/hub/departments/:organization/:department/members', authenticate, 
         .map(async member => {
           const shouldShowPerformance = member.memberRole === 'volunteer' || member.positionTitle === 'volunteer';
           if (shouldShowPerformance) {
-            member.performanceSnapshot = await buildPerformanceSnapshot(member.user._id, []);
+            member.performanceSnapshot = await buildPerformanceSnapshot(member.user._id, [await getCurrentSemesterName()], assignment);
           }
           return serializeDepartmentMember(member, null, 'current');
         })
@@ -3912,144 +4204,35 @@ app.get('/api/hub/departments/:organization/:department/members', authenticate, 
 });
 
 app.post('/api/hub/departments/:organization/:department/members', authenticate, async (req, res) => {
-  const assignment = {
-    organization: req.params.organization,
-    department: req.params.department
-  };
-  if (!isValidManagedDepartment(assignment)) {
-    return res.status(404).json({ success: false, message: '部门模块不存在' });
-  }
-  if (!hasDepartmentCapability(req.user, assignment, 'manage_department_members')) {
-    return res.status(403).json({ success: false, message: '当前身份不能管理该部门成员' });
-  }
-
+  const assignment = { organization: req.params.organization, department: req.params.department };
+  if (!isValidManagedDepartment(assignment)) return res.status(404).json({ success: false, message: '部门模块不存在' });
+  if (!hasDepartmentCapability(req.user, assignment, 'manage_department_members')) return res.status(403).json({ success: false, message: '当前身份不能管理该部门成员' });
   try {
-    const cleanStudentId = sanitizeInput(req.body?.studentId || '');
-    if (!isValidStudentId(cleanStudentId)) {
-      return res.status(400).json({ success: false, message: '请输入10位成员学号' });
-    }
-
-    const user = await User.findOne({ studentId: cleanStudentId });
-    if (!user) return res.status(404).json({ success: false, message: '成员账号不存在，请先完成账号注册或由终极管理员创建账号' });
-    if (user.isUltimateAdmin) return res.status(400).json({ success: false, message: '终极管理员账号不能被设为部门志愿者' });
-
-    const identity = buildIdentityUpdate({
-      memberRole: 'volunteer',
-      positionTitle: 'volunteer',
-      organization: assignment.organization,
-      department: assignment.department,
-      managedDepartments: []
-    }, req.user._id);
-    if (!identity.valid) return res.status(400).json({ success: false, message: identity.message });
-
-    Object.assign(user, identity.update);
-    await user.save();
-
-    const activeCohort = await Cohort.findOne({ status: 'active' }).sort({ startDate: -1, createdAt: -1 });
-    let membership = null;
-    if (activeCohort) {
-      membership = await CohortMembership.findOneAndUpdate(
-        { cohort: activeCohort._id, user: user._id },
-        {
-          $set: {
-            cohort: activeCohort._id,
-            user: user._id,
-            accountSnapshot: buildMemberSnapshot(user),
-            systemRole: user.role,
-            memberRole: user.memberRole,
-            positionTitle: user.positionTitle,
-            organization: user.organization,
-            department: user.department,
-            managedDepartments: []
-          },
-          $push: {
-            appointmentHistory: {
-              memberRole: user.memberRole,
-              positionTitle: user.positionTitle,
-              organization: user.organization,
-              department: user.department,
-              startDate: new Date()
-            }
-          }
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-    }
-
-    await logAction(req.user._id, 'add_department_volunteer', 'user', user._id, {
-      ...assignment,
-      cohortId: activeCohort?._id || null
-    }, req);
-    res.json({
-      success: true,
-      user: serializeUser(user),
-      member: membership ? serializeCohortMember(membership) : null,
-      message: activeCohort ? '已添加为本部门志愿者' : '已添加为本部门志愿者；当前没有 active 届次，未写入届次归档名单'
-    });
-  } catch (error) {
-    console.error('添加部门志愿者失败:', error);
-    res.status(500).json({ success: false, message: '添加部门志愿者失败' });
-  }
+    const studentId = sanitizeInput(req.body.studentId || '');
+    if (!isValidStudentId(studentId)) return res.status(400).json({ success: false, message: '请输入10位成员学号' });
+    const user = await User.findOne({ studentId, isActive: true });
+    if (!user) return res.status(404).json({ success: false, message: '成员账号不存在或已停用' });
+    const ordinary = user.role === 'student' && user.memberRole === 'student' && user.positionTitle === 'student';
+    const sameVolunteer = isConsistentIdentity(user) && user.memberRole === 'volunteer' && isSameAssignment(user, assignment);
+    if (user.isUltimateAdmin || (!ordinary && !sameVolunteer)) return res.status(403).json({ success: false, message: '跨部门调任和负责人身份变更必须由终极管理员操作' });
+    const identity = buildIdentityUpdate({ memberRole: 'volunteer', positionTitle: 'volunteer', ...assignment }, req.user._id);
+    const member = await commitUserIdentity(user, identity.update, req.user._id);
+    await logAction(req.user._id, 'add_department_volunteer', 'user', user._id, assignment, req);
+    res.json({ success: true, user: serializeUser(user), member: member ? serializeCohortMember(member) : null, message: '已添加为本部门志愿者' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '添加部门志愿者失败' }); }
 });
 
 app.delete('/api/hub/departments/:organization/:department/members/:id', authenticate, async (req, res) => {
-  const assignment = {
-    organization: req.params.organization,
-    department: req.params.department
-  };
-  if (!isValidManagedDepartment(assignment)) {
-    return res.status(404).json({ success: false, message: '部门模块不存在' });
-  }
-  if (!hasDepartmentCapability(req.user, assignment, 'manage_department_members')) {
-    return res.status(403).json({ success: false, message: '当前身份不能管理该部门成员' });
-  }
-
+  const assignment = { organization: req.params.organization, department: req.params.department };
+  if (!hasDepartmentCapability(req.user, assignment, 'manage_department_members')) return res.status(403).json({ success: false, message: '当前身份不能管理该部门成员' });
   try {
-    const rawId = sanitizeInput(req.params.id || '');
-    const target = mongoose.Types.ObjectId.isValid(rawId)
-      ? await User.findById(rawId)
-      : await User.findOne({ studentId: rawId });
+    const target = mongoose.Types.ObjectId.isValid(req.params.id) ? await User.findById(req.params.id) : await User.findOne({ studentId: req.params.id });
     if (!target) return res.status(404).json({ success: false, message: '成员账号不存在' });
-    if (target.isUltimateAdmin) return res.status(400).json({ success: false, message: '不能删除终极管理员账号身份' });
-
-    const isDepartmentVolunteer = (target.memberRole === 'volunteer' || target.positionTitle === 'volunteer') &&
-      target.organization === assignment.organization &&
-      target.department === assignment.department;
-    if (!isDepartmentVolunteer) {
-      return res.status(400).json({ success: false, message: '只能删除本部门当前志愿者' });
-    }
-    if (!ensureVolunteerDepartmentAccess(req.user, target)) {
-      return res.status(403).json({ success: false, message: '当前身份不能删除该志愿者' });
-    }
-
-    const activeCohortIds = await Cohort.find({ status: { $ne: 'archived' } }).distinct('_id');
-    let deletedMemberships = { deletedCount: 0 };
-    if (activeCohortIds.length > 0) {
-      deletedMemberships = await CohortMembership.deleteMany({
-        user: target._id,
-        cohort: { $in: activeCohortIds }
-      });
-    }
-
-    target.role = 'student';
-    target.memberRole = 'student';
-    target.positionTitle = 'student';
-    target.organization = null;
-    target.department = null;
-    target.managedDepartments = [];
-    target.moduleCapabilities = [];
-    await target.save();
-
-    await logAction(req.user._id, 'remove_department_volunteer', 'user', target._id, {
-      ...assignment,
-      removedCurrentMemberships: deletedMemberships.deletedCount || 0
-    }, req);
-
-    res.json({ success: true, user: serializeUser(target), message: '已删除本部门志愿者，并降级为普通学生' });
-  } catch (error) {
-    console.error('删除部门志愿者失败', error);
-    res.status(500).json({ success: false, message: '删除部门志愿者失败' });
-  }
+    if (target.isUltimateAdmin || !isConsistentIdentity(target) || target.memberRole !== 'volunteer' || !isSameAssignment(target, assignment)) return res.status(403).json({ success: false, message: '只能移除本部门当前志愿者' });
+    await commitUserIdentity(target, buildIdentityUpdate({ memberRole: 'student', positionTitle: 'student' }).update, req.user._id);
+    await logAction(req.user._id, 'remove_department_volunteer', 'user', target._id, assignment, req);
+    res.json({ success: true, user: serializeUser(target), message: '已结束本部门任期，并降级为普通学生' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '移除部门志愿者失败' }); }
 });
 
 app.get('/api/hub/departments/:organization/:department/accounts', authenticate, async (req, res) => {
@@ -4109,6 +4292,7 @@ app.get('/api/ultimate/cohorts', authenticate, ultimateOnly, async (req, res) =>
 app.post('/api/ultimate/cohorts', authenticate, ultimateOnly, async (req, res) => {
   try {
     const { name, startDate, endDate, status = 'draft', semesters = [] } = req.body;
+    if (!['draft', 'active'].includes(status)) return res.status(400).json({ success: false, message: '新届次只能是草稿或在任' });
     if (!name) return res.status(400).json({ success: false, message: '请填写届次名称' });
     const cohort = await Cohort.create({
       name: sanitizeInput(name),
@@ -4126,20 +4310,19 @@ app.post('/api/ultimate/cohorts', authenticate, ultimateOnly, async (req, res) =
 
 app.patch('/api/ultimate/cohorts/:id', authenticate, ultimateOnly, async (req, res) => {
   try {
-    const cohort = await Cohort.findById(req.params.id);
-    if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
-    ['name', 'status'].forEach(field => {
-      if (req.body[field] !== undefined) cohort[field] = sanitizeInput(req.body[field]);
+    const cohort = await withWriteLock(`cohort:${req.params.id}`, async () => {
+      const current = await Cohort.findById(req.params.id);
+      if (!current) throw Object.assign(new Error('届次不存在'), { status: 404 });
+      if (['archiving', 'archived'].includes(current.status)) throw Object.assign(new Error('归档届次不可编辑'), { status: 409 });
+      if (req.body.status && !['draft', 'active'].includes(req.body.status)) throw Object.assign(new Error('请使用归档接口冻结届次'), { status: 400 });
+      for (const field of ['name', 'status']) if (req.body[field] !== undefined) current[field] = sanitizeInput(req.body[field]);
+      for (const field of ['startDate', 'endDate']) if (req.body[field] !== undefined) current[field] = req.body[field] ? new Date(req.body[field]) : null;
+      if (Array.isArray(req.body.semesters)) current.semesters = req.body.semesters.map(sanitizeInput).filter(Boolean);
+      await current.save(); return current;
     });
-    if (req.body.startDate !== undefined) cohort.startDate = req.body.startDate ? new Date(req.body.startDate) : undefined;
-    if (req.body.endDate !== undefined) cohort.endDate = req.body.endDate ? new Date(req.body.endDate) : undefined;
-    if (Array.isArray(req.body.semesters)) cohort.semesters = req.body.semesters.map(sanitizeInput).filter(Boolean);
-    await cohort.save();
     await logAction(req.user._id, 'update_cohort', 'cohort', cohort._id, {}, req);
     res.json({ success: true, cohort: serializeCohort(cohort) });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '更新届次失败' });
-  }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '更新届次失败' }); }
 });
 
 app.delete('/api/ultimate/cohorts/:id', authenticate, ultimateOnly, async (req, res) => {
@@ -4185,17 +4368,14 @@ app.patch('/api/ultimate/users/:studentId/identity', authenticate, ultimateOnly,
   try {
     const user = await User.findOne({ studentId: req.params.studentId });
     if (!user) return res.status(404).json({ success: false, message: '用户不存在' });
-
+    if (idOf(user) === idOf(req.user) && req.body.isUltimateAdmin === false) return res.status(400).json({ success: false, message: '不能移除当前登录账号的终极管理员权限' });
     const identity = buildIdentityUpdate(req.body, req.user._id);
     if (!identity.valid) return res.status(400).json({ success: false, message: identity.message });
-    Object.assign(user, identity.update);
-    await user.save();
-
+    if (typeof req.body.isUltimateAdmin === 'boolean') identity.update.isUltimateAdmin = req.body.isUltimateAdmin;
+    await commitUserIdentity(user, identity.update, req.user._id);
     await logAction(req.user._id, 'assign_identity', 'user', user._id, identity.update, req);
     res.json({ success: true, user: serializeUser(user) });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '身份分配失败' });
-  }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '身份分配失败' }); }
 });
 
 app.get('/api/ultimate/members', authenticate, ultimateOnly, async (req, res) => {
@@ -4214,132 +4394,51 @@ app.get('/api/ultimate/members', authenticate, ultimateOnly, async (req, res) =>
 
 app.post('/api/ultimate/members', authenticate, ultimateOnly, async (req, res) => {
   try {
-    const { cohortId, studentId, password, name, email, phone } = req.body;
-    const cleanStudentId = sanitizeInput(studentId);
-    const cleanEmail = normalizeEmail(email);
-    if (!cohortId || !studentId) return res.status(400).json({ success: false, message: '缺少届次或学号' });
-    if (!isValidStudentId(cleanStudentId)) return res.status(400).json({ success: false, message: '成员账号学号必须为唯一的10位数字' });
+    const cohortId = req.body.cohortId || req.params.id;
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
-    if (cohort.status === 'archived') return res.status(400).json({ success: false, message: '已归档届次不可继续编辑成员' });
-
+    if (['archiving', 'archived'].includes(cohort.status)) return res.status(409).json({ success: false, message: '归档届次不可继续编辑' });
     const identity = buildIdentityUpdate(req.body, req.user._id);
     if (!identity.valid) return res.status(400).json({ success: false, message: identity.message });
-
-    let user = await User.findOne({ studentId: cleanStudentId });
+    const studentId = sanitizeInput(req.body.studentId || '');
+    let user = req.body.userId ? await User.findById(req.body.userId) : await User.findOne({ studentId });
+    let newlyCreated = false;
     if (!user) {
-      if (!password || !name || !email) {
-        return res.status(400).json({ success: false, message: '新成员账号需要姓名、邮箱和初始密码' });
-      }
-      if (!isValidEmail(cleanEmail)) return res.status(400).json({ success: false, message: '邮箱格式不正确' });
-      const duplicatedEmail = await User.findOne({ email: cleanEmail });
-      if (duplicatedEmail) return res.status(400).json({ success: false, message: '该邮箱已被其他账号绑定' });
-      user = await User.create({
-        studentId: cleanStudentId,
-        password,
-        name: sanitizeInput(name),
-        email: cleanEmail,
-        phone: sanitizeInput(phone),
-        ...identity.update
-      });
-    } else {
-      if (name) user.name = sanitizeInput(name);
-      if (email) {
-        if (!isValidEmail(cleanEmail)) return res.status(400).json({ success: false, message: '邮箱格式不正确' });
-        const duplicatedEmail = await User.findOne({ _id: { $ne: user._id }, email: cleanEmail });
-        if (duplicatedEmail) return res.status(400).json({ success: false, message: '该邮箱已被其他账号绑定' });
-        user.email = cleanEmail;
-      }
-      if (phone !== undefined) user.phone = sanitizeInput(phone);
-      Object.assign(user, identity.update);
-      await user.save();
+      if (!isValidStudentId(studentId) || !req.body.password || !req.body.name || !isValidEmail(normalizeEmail(req.body.email))) return res.status(400).json({ success: false, message: '新账号需要10位学号、姓名、有效邮箱和初始密码' });
+      user = await User.create({ studentId, password: req.body.password, name: sanitizeInput(req.body.name), email: normalizeEmail(req.body.email), phone: sanitizeInput(req.body.phone) });
+      newlyCreated = true;
     }
-
-    const membership = await CohortMembership.findOneAndUpdate(
-      { cohort: cohort._id, user: user._id },
-      {
-        $set: {
-          cohort: cohort._id,
-          user: user._id,
-          accountSnapshot: buildMemberSnapshot(user),
-          systemRole: user.role,
-          memberRole: user.memberRole,
-          positionTitle: user.positionTitle,
-          organization: user.organization,
-          department: user.department,
-          managedDepartments: user.managedDepartments
-        },
-        $push: {
-          appointmentHistory: {
-            memberRole: user.memberRole,
-            positionTitle: user.positionTitle,
-            organization: user.organization,
-            department: user.department,
-            startDate: req.body.appointmentStart ? new Date(req.body.appointmentStart) : new Date(),
-            endDate: req.body.appointmentEnd ? new Date(req.body.appointmentEnd) : undefined
-          }
-        }
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).populate('user', 'name studentId email phone');
-
-    await logAction(req.user._id, 'upsert_cohort_member', 'cohortMembership', membership._id, { cohortId, studentId }, req);
-    res.json({ success: true, member: serializeCohortMember(membership) });
-  } catch (error) {
-    console.error('保存届次成员失败:', error);
-    res.status(500).json({ success: false, message: '保存届次成员失败' });
-  }
+    if (user.isUltimateAdmin) return res.status(403).json({ success: false, message: '终极管理员不纳入部门届次名单' });
+    const update = { ...identity.update };
+    for (const field of ['name', 'phone']) if (req.body[field] !== undefined) update[field] = sanitizeInput(req.body[field]);
+    if (req.body.email !== undefined) {
+      const email = normalizeEmail(req.body.email);
+      if (!isValidEmail(email) || await User.exists({ _id: { $ne: user._id }, email })) return res.status(400).json({ success: false, message: '邮箱无效或已被占用' });
+      update.email = email;
+    }
+    const member = await commitUserIdentity(user, update, req.user._id, { cohort, newlyCreated, appointmentStart: req.body.appointmentStart || req.body.startDate, appointmentEnd: req.body.appointmentEnd || req.body.endDate });
+    await logAction(req.user._id, 'upsert_cohort_member', 'cohortMembership', member?._id || user._id, { cohortId }, req);
+    res.json({ success: true, user: serializeUser(user), member: member ? serializeCohortMember(member) : null, membership: member });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '保存届次成员失败' }); }
 });
 
 app.patch('/api/ultimate/members/:id', authenticate, ultimateOnly, async (req, res) => {
   try {
     const membership = await CohortMembership.findById(req.params.id).populate('user');
-    if (!membership) return res.status(404).json({ success: false, message: '成员不存在' });
-    if (!membership.user) return res.status(400).json({ success: false, message: '成员未绑定账号' });
+    if (!membership?.user) return res.status(404).json({ success: false, message: '成员账号不存在' });
     const cohort = await Cohort.findById(membership.cohort);
-    if (cohort?.status === 'archived') return res.status(400).json({ success: false, message: '已归档届次不可继续编辑成员' });
-
-    const user = membership.user;
-    ['name', 'email', 'phone', 'studentId'].forEach(field => {
-      if (req.body[field] !== undefined) user[field] = sanitizeInput(req.body[field]);
-    });
-
-    const identity = buildIdentityUpdate({
-      memberRole: req.body.memberRole || membership.memberRole,
-      positionTitle: req.body.positionTitle || membership.positionTitle,
-      organization: req.body.organization !== undefined ? req.body.organization : membership.organization,
-      department: req.body.department !== undefined ? req.body.department : membership.department,
-      managedDepartments: req.body.managedDepartments !== undefined ? req.body.managedDepartments : membership.managedDepartments
-    }, req.user._id);
+    if (!cohort || ['archiving', 'archived'].includes(cohort.status)) return res.status(409).json({ success: false, message: '归档届次不可编辑' });
+    const identity = buildIdentityUpdate({ ...membership.toObject(), ...req.body }, req.user._id);
     if (!identity.valid) return res.status(400).json({ success: false, message: identity.message });
-
-    Object.assign(user, identity.update);
-    await user.save();
-
-    membership.accountSnapshot = buildMemberSnapshot(user);
-    membership.systemRole = user.role;
-    membership.memberRole = user.memberRole;
-    membership.positionTitle = user.positionTitle;
-    membership.organization = user.organization;
-    membership.department = user.department;
-    membership.managedDepartments = user.managedDepartments;
-    membership.appointmentHistory.push({
-      memberRole: user.memberRole,
-      positionTitle: user.positionTitle,
-      organization: user.organization,
-      department: user.department,
-      startDate: req.body.appointmentStart ? new Date(req.body.appointmentStart) : new Date(),
-      endDate: req.body.appointmentEnd ? new Date(req.body.appointmentEnd) : undefined
-    });
-    await membership.save();
-
+    const update = { ...identity.update };
+    for (const field of ['name', 'phone', 'studentId']) if (req.body[field] !== undefined) update[field] = sanitizeInput(req.body[field]);
+    if (update.studentId && !isValidStudentId(update.studentId)) return res.status(400).json({ success: false, message: '学号必须为10位数字' });
+    if (req.body.email !== undefined) update.email = normalizeEmail(req.body.email);
+    if ((update.email && !isValidEmail(update.email)) || await User.exists({ _id: { $ne: membership.user._id }, $or: [{ email: update.email || membership.user.email }, { studentId: update.studentId || membership.user.studentId }] })) return res.status(400).json({ success: false, message: '学号或邮箱无效或已被占用' });
+    const member = await commitUserIdentity(membership.user, update, req.user._id, { cohort });
     await logAction(req.user._id, 'update_cohort_member', 'cohortMembership', membership._id, {}, req);
-    await membership.populate('user', 'name studentId email phone');
-    res.json({ success: true, member: serializeCohortMember(membership) });
-  } catch (error) {
-    console.error('更新届次成员失败:', error);
-    res.status(500).json({ success: false, message: '更新届次成员失败' });
-  }
+    res.json({ success: true, member: serializeCohortMember(member) });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '更新届次成员失败' }); }
 });
 
 app.get('/api/ultimate/cohorts/:id/archive-preview', authenticate, ultimateOnly, async (req, res) => {
@@ -4348,9 +4447,9 @@ app.get('/api/ultimate/cohorts/:id/archive-preview', authenticate, ultimateOnly,
     if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
     const members = await CohortMembership.find({ cohort: cohort._id })
       .populate('user', 'name studentId email phone role memberRole positionTitle organization department managedDepartments isUltimateAdmin');
-    const currentMembers = filterCohortMembershipsForDisplay(members, cohort);
+    const currentMembers = members;
     const previews = await Promise.all(currentMembers.map(async (member) => {
-      const snapshot = await buildPerformanceSnapshot(member.user?._id || member.user, cohort.semesters || []);
+      const snapshot = cohort.status === 'archived' || (member.endedAt && member.performanceSnapshot?.archivedAt) ? member.performanceSnapshot : await buildPerformanceSnapshot(member.user?._id || member.user, cohort.semesters || [], member);
       return {
         ...serializeCohortMember(member),
         performanceSnapshot: snapshot
@@ -4371,100 +4470,71 @@ app.get('/api/ultimate/cohorts/:id/archive-preview', authenticate, ultimateOnly,
 
 app.post('/api/ultimate/cohorts/:id/archive', authenticate, ultimateOnly, async (req, res) => {
   try {
-    const cohort = await Cohort.findById(req.params.id);
-    if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
-    const allMembers = await CohortMembership.find({ cohort: cohort._id }).populate('user');
-    const members = filterCohortMembershipsForDisplay(allMembers, cohort);
-    const snapshots = [];
-
-    for (const member of members) {
-      if (member.user) {
-        member.accountSnapshot = buildMemberSnapshot(member.user);
-        member.performanceSnapshot = await buildPerformanceSnapshot(member.user?._id || member.user, cohort.semesters || []);
-        if (!member.user.isUltimateAdmin) {
-          member.user.role = 'student';
-          member.user.memberRole = 'student';
-          member.user.positionTitle = 'student';
-          member.user.organization = null;
-          member.user.department = null;
-          member.user.managedDepartments = [];
-          await member.user.save();
-        }
-      } else {
-        member.performanceSnapshot = await buildPerformanceSnapshot(member.user?._id || member.user, cohort.semesters || []);
-      }
-      member.archivedAt = new Date();
-      member.archivedBy = req.user._id;
-      snapshots.push(member);
-    }
-
-    snapshots.sort((a, b) => Number(b.performanceSnapshot?.total || 0) - Number(a.performanceSnapshot?.total || 0));
-    snapshots.forEach((member, index) => {
-      member.performanceSnapshot.rank = index + 1;
-    });
-    await Promise.all(snapshots.map(member => member.save()));
-
-    cohort.status = 'archived';
-    cohort.archivedAt = new Date();
-    cohort.archivedBy = req.user._id;
-    await cohort.save();
-
-    await logAction(req.user._id, 'archive_cohort', 'cohort', cohort._id, { members: members.length }, req);
-    res.json({ success: true, cohort: serializeCohort(cohort), archivedMembers: members.length });
-  } catch (error) {
-    console.error('归档届次失败:', error);
-    res.status(500).json({ success: false, message: '归档届次失败' });
-  }
+    const result = await archiveCohort(req.params.id, req.user._id);
+    await logAction(req.user._id, 'archive_cohort', 'cohort', result.cohort._id, { members: result.archivedMembers }, req);
+    res.json({ success: true, cohort: serializeCohort(result.cohort), archivedMembers: result.archivedMembers, message: '届次已归档' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '归档未完成，请重试同一届次以继续' }); }
 });
 
 // [新增] 通用文件上传接口
-app.post('/api/upload', authenticate, upload.array('files', 10), (req, res) => {
+app.post('/api/upload', authenticate, upload.array('files', 10), async (req, res) => {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: '未检测到文件' });
+    for (const file of req.files || []) if (!matchesFileSignature(fs.readFileSync(file.path).subarray(0, 8192), file.originalname)) throw Object.assign(new Error('附件内容与文件类型不符'), { status: 400 });
+    const files = [];
+    for (const file of req.files || []) {
+      const originalName = decodeOriginalFilename(file.originalname);
+      const upload = await PrivateUpload.create({ filename: file.filename, owner: req.user._id, path: `/api/uploads/${file.filename}`, originalName, mimetype: file.mimetype });
+      files.push({ filename: originalName, path: upload.path, mimetype: file.mimetype, size: file.size });
     }
-    const files = req.files.map(file => ({
-      filename: Buffer.from(file.originalname, 'latin1').toString('utf8'),
-      // [修复] 新上传的文件路径加上 /api 前缀
-      path: `/api/uploads/${file.filename}`,
-      mimetype: file.mimetype
-    }));
     res.json({ success: true, files });
   } catch (error) {
-    console.error('上传失败:', error);
-    res.status(500).json({ success: false, message: '文件上传失败' });
+    for (const file of req.files || []) { fs.rmSync(file.path, { force: true }); await PrivateUpload.deleteOne({ filename: file.filename }); }
+    res.status(error.status || 500).json({ success: false, message: error.status === 400 ? error.message : '附件上传失败' });
   }
 });
 
 installSieBridgeRoutes({ app, authenticate, logAction, Notification });
+installCulturePerformanceRoutes({ app, authenticate, logAction, User, CohortMembership, getDepartmentPerformanceAccess, getDepartmentCapabilityAccess });
+
+app.get('/api/uploads/avatars/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename);
+  if (filename !== req.params.filename || !/\.(png|jpe?g|webp)$/i.test(filename)) return res.sendStatus(404);
+  const target = path.join(avatarUploadDir, filename);
+  if (!fs.existsSync(target) || !matchesFileSignature(fs.readFileSync(target).subarray(0, 32), filename)) return res.sendStatus(404);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(target);
+});
+app.get('/api/uploads/:filename', authenticate, async (req, res) => {
+  try {
+    const filename = path.basename(req.params.filename);
+    if (filename !== req.params.filename) return res.sendStatus(404);
+    const assetPath = `/api/uploads/${filename}`;
+    const parents = await Feedback.find({ $or: [{ 'attachments.path': assetPath }, { 'responses.attachments.path': assetPath }] });
+    const upload = await PrivateUpload.findOne({ filename });
+    const parentAccess = parents.some(feedback => canReadFeedback(req.user, feedback) && (feedback.attachments.some(item => item.path === assetPath) || feedback.responses.some(response => !response.isRecalled && (response.attachments || []).some(item => item.path === assetPath))));
+    if (!parentAccess && !(parents.length === 0 && upload && idOf(upload.owner) === idOf(req.user))) return res.status(403).json({ success: false, message: '无权下载此附件' });
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.download(path.join(uploadDir, filename), upload?.originalName || filename);
+  } catch (error) { res.status(500).json({ success: false, message: '下载附件失败' }); }
+});
+
 
 // [修改] 消息撤回接口 (限制仅本人或超管可撤回，并记录撤回人角色)
 app.patch('/api/feedback/:id/reply/:replyId/recall', authenticate, async (req, res) => {
   try {
     const feedback = await Feedback.findById(req.params.id);
     if (!feedback) return res.status(404).json({ success: false, message: '反馈不存在' });
-
+    if (!canReadFeedback(req.user, feedback) || feedback.isRevoked) return res.status(403).json({ success: false, message: '无权修改此反馈' });
     const reply = feedback.responses.id(req.params.replyId);
     if (!reply) return res.status(404).json({ success: false, message: '回复不存在' });
-
-    // 权限校验：判断是否是发出者本人，或者是超级管理员
-    const isSender = reply.adminId && reply.adminId.toString() === req.user._id.toString();
-    const isSuperadmin = hasSuperadminAccess(req.user);
-
-    if (!isSender && !isSuperadmin) {
-      return res.status(403).json({ success: false, message: '权限不足：只能撤回自己发出的消息' });
-    }
-
-    // 标记为已撤回，并记录执行撤回的角色
-    reply.isRecalled = true;
-    reply.recalledByRole = isSender ? 'self' : 'superadmin';
-    await feedback.save();
-    
+    const isSender = idOf(reply.adminId) === idOf(req.user) || (reply.senderType === 'student' && idOf(feedback.user) === idOf(req.user));
+    const manager = ensureFeedbackAccess(req.user, feedback) && (req.user.isUltimateAdmin || getUserManagedDepartments(req.user).length > 0);
+    if (!isSender && !manager) return res.status(403).json({ success: false, message: '只能撤回自己发出的消息' });
+    await Feedback.updateOne({ _id: feedback._id, isRevoked: { $ne: true }, 'responses._id': reply._id }, { $set: { 'responses.$.isRecalled': true, 'responses.$.recalledByRole': isSender ? 'self' : 'superadmin' } });
     res.json({ success: true, message: '撤回成功' });
-  } catch (error) {
-    console.error('撤回失败:', error);
-    res.status(500).json({ success: false, message: '服务器内部错误' });
-  }
+  } catch (error) { res.status(500).json({ success: false, message: '撤回失败' }); }
 });
 
 // ================== 认证相关 ==================
@@ -4489,7 +4559,8 @@ app.post('/api/auth/email-code/register', async (req, res) => {
     });
   } catch (error) {
     console.error('发送注册验证码失败:', error);
-    res.status(500).json({ success: false, message: '验证码发送失败，请稍后重试' });
+    const failure = getEmailDeliveryFailure(error);
+    res.status(failure.status).json({ success: false, message: failure.message });
   }
 });
 
@@ -4513,7 +4584,8 @@ app.post('/api/auth/email-code/password-reset', async (req, res) => {
     });
   } catch (error) {
     console.error('发送找回密码验证码失败:', error);
-    res.status(500).json({ success: false, message: '验证码发送失败，请稍后重试' });
+    const failure = getEmailDeliveryFailure(error);
+    res.status(failure.status).json({ success: false, message: failure.message });
   }
 });
 
@@ -4530,15 +4602,12 @@ app.post('/api/auth/password-reset', async (req, res) => {
     const user = await User.findOne({ email, isActive: true });
     if (!user) return res.status(404).json({ success: false, message: '未找到绑定该邮箱的账号' });
 
-    user.password = password;
-    user.loginAttempts = 0;
-    user.lockUntil = undefined;
-    await user.save();
+    await setAccountPassword(user, password);
     await logAction(user._id, 'reset_password_by_email', 'user', user._id, { email }, req);
     res.json({ success: true, message: '密码已重置，请使用新密码登录' });
   } catch (error) {
     console.error('找回密码失败:', error);
-    res.status(500).json({ success: false, message: '密码重置失败，请稍后重试' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '密码重置失败，请稍后重试' });
   }
 });
 
@@ -4617,6 +4686,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ success: false, message: '学号或密码错误' });
     }
     
+    if (!user.isActive) return res.status(401).json({ success: false, message: '账号已停用' });
     // 检查账户锁定
     if (user.isLocked()) await recordLoginEvent({ user, studentId: loginStudentId, success: false, reason: 'locked' }, req);
     if (user.isLocked()) {
@@ -4648,7 +4718,7 @@ app.post('/api/auth/login', async (req, res) => {
     
     // 生成JWT
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { id: user._id, role: user.role, tokenVersion: Number(user.tokenVersion || 0), jti: crypto.randomUUID() },
       config.jwtSecret,
       { expiresIn: getLoginTokenExpiresIn(persistLogin) }
     );
@@ -4699,71 +4769,57 @@ app.put('/api/auth/password', authenticate, async (req, res) => {
     }
 
     // 4. 设置新密码并保存 (pre-save hook 会自动处理加密)
-    user.password = newPassword;
-    await user.save();
+    await setAccountPassword(user, newPassword);
 
     // 5. 记录日志
     await logAction(req.user._id, 'password_change', 'user', req.user._id, { action: 'self_reset' }, req);
 
-   res.json({ success: true, message: '密码修改成功，请妥善保管' });
+   res.json({ success: true, sessionRevoked: true, message: '密码修改成功，请重新登录' });
   } catch (error) {
     console.error('密码修改失败:', error);
-    res.status(500).json({ success: false, message: '服务器错误，请稍后再试' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '服务器错误，请稍后再试' });
   }
 });
 
 // [新增] 修改个人信息接口
 app.put('/api/auth/profile', authenticate, async (req, res) => {
   try {
-    const { name, email, phone, studentId } = req.body;
-    const cleanStudentId = sanitizeInput(studentId);
+    const { name, email, phone, studentId, currentPassword, emailCode } = req.body;
     const cleanEmail = normalizeEmail(email);
-
-    // 基本验证
-    if (!name || !email || !studentId) {
-      return res.status(400).json({ success: false, message: '姓名、邮箱和学号为必填项' });
+    if (!name || !isValidEmail(cleanEmail)) return res.status(400).json({ success: false, message: '请填写姓名和有效邮箱' });
+    if (studentId !== undefined && sanitizeInput(studentId) !== req.user.studentId) return res.status(403).json({ success: false, message: '学号是稳定身份标识，请联系终极管理员更正' });
+    const user = await User.findById(req.user._id).select('+password');
+    const changingEmail = cleanEmail !== user.email;
+    if (await User.exists({ _id: { $ne: user._id }, email: cleanEmail })) return res.status(400).json({ success: false, message: '邮箱已被其他账号绑定' });
+    if (changingEmail) {
+      if (!currentPassword || !await user.comparePassword(currentPassword)) return res.status(400).json({ success: false, message: '请验证当前密码' });
+      const verification = await verifyEmailCode({ email: cleanEmail, purpose: 'profile_email', code: emailCode });
+      if (!verification.ok) return res.status(400).json({ success: false, message: verification.message });
     }
-    if (!req.user.isUltimateAdmin && req.user.role === 'student' && !isValidStudentId(cleanStudentId)) {
-      return res.status(400).json({ success: false, message: '学生账号学号必须为唯一的10位数字' });
-    }
-    if (!isValidEmail(cleanEmail)) {
-      return res.status(400).json({ success: false, message: '邮箱格式不正确' });
-    }
+    await commitUserIdentity(user, { name: sanitizeInput(name), email: cleanEmail, phone: sanitizeInput(phone), ...(changingEmail ? { tokenVersion: Number(user.tokenVersion || 0) + 1 } : {}) }, user._id);
+    await logAction(user._id, 'update_profile', 'user', user._id, { changedEmail: changingEmail }, req);
+    res.json({ success: true, user: serializeUser(user), sessionRevoked: changingEmail, message: changingEmail ? '邮箱已更新，请重新登录' : '个人资料修改成功' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '修改资料失败' }); }
+});
 
-    // 检查学号或邮箱是否被其他用户占用
-    const existingUser = await User.findOne({
-      $and: [
-        { _id: { $ne: req.user._id } }, // 排除当前用户自己
-        { $or: [{ studentId: cleanStudentId }, { email: cleanEmail }] }
-      ]
-    });
 
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: existingUser.studentId === cleanStudentId ? '该学号已被其他账号使用' : '该邮箱已被其他账号绑定'
-      });
-    }
-
-    // 更新用户信息 (禁止修改 role 权限)
-    const user = await User.findById(req.user._id);
-    user.name = sanitizeInput(name);
-    user.email = cleanEmail;
-    user.phone = sanitizeInput(phone);
-    user.studentId = cleanStudentId;
-    await user.save();
-
-    await logAction(req.user._id, 'update_profile', 'user', req.user._id, { action: 'update_info' }, req);
-
-    res.json({
-      success: true,
-      message: '个人资料修改成功',
-      user: serializeUser(user)
-    });
-  } catch (error) {
-    console.error('修改信息失败:', error);
-    res.status(500).json({ success: false, message: '服务器错误，请稍后再试' });
-  }
+app.post('/api/auth/email-code/profile-email', authenticate, async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const user = await User.findById(req.user._id).select('+password');
+    if (!isValidEmail(email) || email === user.email) return res.status(400).json({ success: false, message: '请输入新的有效邮箱' });
+    if (!req.body.currentPassword || !await user.comparePassword(req.body.currentPassword)) return res.status(400).json({ success: false, message: '请验证当前密码' });
+    if (await User.exists({ email })) return res.status(400).json({ success: false, message: '邮箱已被绑定' });
+    const result = await issueEmailVerification({ email, purpose: 'profile_email' });
+    res.status(result.ok ? 200 : result.status || 400).json({ success: result.ok, ...result, message: result.ok ? '验证码已发送至新邮箱' : result.message });
+  } catch (error) { const failure = getEmailDeliveryFailure(error); res.status(failure.status).json({ success: false, message: failure.message }); }
+});
+app.post('/api/auth/logout', authenticate, async (req, res) => {
+  try {
+    if (req.auth.jti) await RevokedSession.updateOne({ _id: req.auth.jti }, { expiresAt: new Date(req.auth.exp * 1000) }, { upsert: true });
+    else await User.updateOne({ _id: req.user._id }, { $inc: { tokenVersion: 1 } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ success: false, message: '退出会话未完成，请重试' }); }
 });
 
 // ================== 反馈相关 ==================
@@ -4774,6 +4830,7 @@ app.post('/api/auth/avatar', authenticate, avatarUpload.single('avatar'), async 
       return res.status(400).json({ success: false, message: '未检测到头像文件' });
     }
     const user = await User.findById(req.user._id);
+    if (!matchesFileSignature(fs.readFileSync(req.file.path).subarray(0, 32), req.file.originalname)) { fs.rmSync(req.file.path, { force: true }); return res.status(400).json({ success: false, message: '头像内容与图片类型不符' }); }
     user.avatarUrl = `/api/uploads/avatars/${req.file.filename}`;
     await user.save();
     await logAction(req.user._id, 'update_avatar', 'user', req.user._id, { avatarUrl: user.avatarUrl }, req);
@@ -4926,20 +4983,23 @@ app.delete('/api/feedback/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: '反馈不存在' });
     }
     
-    // 权限校验：仅允许发帖人本人，或具备该反馈范围权限的管理者删除
-    if (feedback.user.toString() !== req.user._id.toString() && !hasSuperadminAccess(req.user)) {
-      return res.status(403).json({ success: false, message: '权限不足：只能撤销自己的反馈' });
-    }
-    if (feedback.user.toString() !== req.user._id.toString() && !ensureFeedbackAccess(req.user, feedback)) {
-      return res.status(403).json({ success: false, message: '权限不足：不能撤销其他部门反馈' });
+    if (!canWithdrawSievoxFeedback(req.user, feedback) || (idOf(feedback.user) !== idOf(req.user) && !ensureFeedbackAccess(req.user, feedback))) {
+      const isSubmitter = feedback.user.toString() === req.user._id.toString();
+      return res.status(403).json({
+        success: false,
+        message: isSubmitter
+          ? '反馈进入处理流程后不能自行撤回'
+          : '仅学生权益部负责人或分管学生权益部的主席团成员可代为撤回'
+      });
     }
 
     // [修改] 软删除逻辑
-    feedback.isRevoked = true;
-    feedback.revokedAt = new Date();
-    await feedback.save();
+    const withdrawn = await Feedback.updateOne({ _id: feedback._id, isRevoked: { $ne: true }, ...(idOf(feedback.user) === idOf(req.user) ? { status: 'pending' } : {}) }, { $set: { isRevoked: true, revokedAt: new Date() } });
+    if (!withdrawn.modifiedCount && !feedback.isRevoked) return res.status(409).json({ success: false, message: '反馈状态已变化，请刷新' });
 
-    await logAction(req.user._id, 'revoke', 'feedback', feedback._id, { action: 'student_revoke' }, req);
+    await logAction(req.user._id, 'revoke', 'feedback', feedback._id, {
+      action: feedback.user.toString() === req.user._id.toString() ? 'student_revoke' : 'manager_revoke'
+    }, req);
 
     res.json({ success: true, message: '反馈已成功撤销' });
   } catch (error) {
@@ -4951,35 +5011,20 @@ app.delete('/api/feedback/:id', authenticate, async (req, res) => {
 // [新增] 学生对反馈问题添加补充留言
 app.post('/api/feedback/:id/reply', authenticate, async (req, res) => {
   try {
-    const { content } = req.body;
-    if (!content) return res.status(400).json({ success: false, message: '留言不能为空' });
-    
+    const content = sanitizeInput(req.body.content || '');
+    if (!content && !(req.body.attachments || []).length) return res.status(400).json({ success: false, message: '留言不能为空' });
     const feedback = await Feedback.findById(req.params.id);
-    if (!feedback || feedback.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: '无权操作' });
-    }
-
-    feedback.responses.push({
-      content: sanitizeInput(content),
-      senderType: 'student',
-      senderName: req.user.name
-    });
-    await feedback.save();
-
-    // 触发通知：发给所有管理员
-    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } });
-    const notifications = admins.map(admin => ({
-      user: admin._id,
-      type: 'new_message',
-      feedbackId: feedback._id,
-      content: `您有新的留言：学生对问题 [${feedback.title}] 进行了补充`
-    }));
-    await Notification.insertMany(notifications);
-
-    res.json({ success: true, feedback });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '留言失败' });
-  }
+    if (!feedback || !canReadFeedback(req.user, feedback) || feedback.isRevoked) return res.status(403).json({ success: false, message: '无权修改此反馈' });
+    const isOwner = idOf(feedback.user) === idOf(req.user);
+    const attachments = await validateOwnedAttachments(req.user, req.body.attachments || []);
+    const updated = await Feedback.findOneAndUpdate({ _id: feedback._id, isRevoked: { $ne: true } }, { $push: { responses: { content, senderType: isOwner ? 'student' : req.user.role === 'superadmin' ? 'superadmin' : 'admin', senderName: isOwner && feedback.isAnonymous ? '匿名用户' : req.user.name, adminName: isOwner ? undefined : req.user.name, adminId: req.user._id, attachments } } }, { new: true, runValidators: true });
+    if (!updated) return res.status(409).json({ success: false, message: '反馈已撤回，请刷新' });
+    if (isOwner) {
+      const managers = (await User.find({ isActive: true, role: { $in: ['admin', 'superadmin'] } })).filter(user => ensureFeedbackAccess(user, updated));
+      if (managers.length) await Notification.insertMany(managers.map(user => ({ user: user._id, type: 'new_message', feedbackId: updated._id, content: `学生对问题 [${updated.title}] 进行了补充` })));
+    } else await Notification.create({ user: feedback.user, type: 'new_message', feedbackId: updated._id, content: `您的问题 [${updated.title}] 有新回复` });
+    res.json({ success: true, feedback: serializeFeedbackForViewer(updated, req.user) });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '留言失败' }); }
 });
 
 // 提交反馈
@@ -5001,12 +5046,12 @@ app.post('/api/feedback', authenticate, async (req, res) => {
       content: sanitizeInput(content),
       priority: priority || 'normal',
       isAnonymous: !!isAnonymous,
-      attachments: attachments || [] // [新增] 存入数据库
+      attachments: await validateOwnedAttachments(req.user, attachments || [])
     });
     await logAction(req.user._id, 'create', 'feedback', feedback._id, { category }, req);
 
     // [新增] 触发通知给管理员
-    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } });
+    const admins = (await User.find({ isActive: true, role: { $in: ['admin', 'superadmin'] } })).filter(user => ensureFeedbackAccess(user, feedback));
     const notifications = admins.map(admin => ({
       user: admin._id,
       type: 'new_feedback',
@@ -5033,55 +5078,31 @@ app.post('/api/feedback', authenticate, async (req, res) => {
 // 获取我的反馈列表
 app.get('/api/feedback/my', authenticate, async (req, res) => {
   try {
-    const { status, category, page = 1, limit = 20 } = req.query;
-    
-    // [修改] 排除已被撤回的反馈
-    const query = { user: req.user._id, isRevoked: { $ne: true } };
-    if (status) query.status = status;
-    if (category) query.category = category;
-    
-    const feedbacks = await Feedback.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .lean();
-    
+    const { page, limit } = paginationOf(req.query);
+    const baseQuery = { user: req.user._id, isRevoked: { $ne: true } };
+    if (req.query.category) baseQuery.category = sanitizeInput(req.query.category);
+    const query = { ...baseQuery };
+    if (req.query.status) query.status = sanitizeInput(req.query.status);
+    const search = sanitizeInput(req.query.search || '').trim().slice(0, 100);
+    if (search) {
+      const pattern = escapeRegExp(search);
+      query.$or = ['title', 'content', 'subCategory'].map(field => ({ [field]: { $regex: pattern, $options: 'i' } }));
+    }
+    const feedbacks = await Feedback.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
     const total = await Feedback.countDocuments(query);
-    
-    res.json({
-      success: true,
-      feedbacks,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '获取反馈列表失败' });
-  }
+    const summary = await feedbackSummary(baseQuery);
+    res.json({ success: true, feedbacks: feedbacks.map(feedback => serializeFeedbackForViewer(feedback, req.user)), summary, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+  } catch (error) { res.status(500).json({ success: false, message: '获取反馈列表失败' }); }
 });
 
 // 获取单个反馈详情
 app.get('/api/feedback/:id', authenticate, async (req, res) => {
   try {
-    const feedback = await Feedback.findById(req.params.id);
-    
-    if (!feedback) {
-      return res.status(404).json({ success: false, message: '反馈不存在' });
-    }
-    
-    // 检查权限
-    if (feedback.user.toString() !== req.user._id.toString() && 
-        req.user.role === 'student') {
-      return res.status(403).json({ success: false, message: '无权查看此反馈' });
-    }
-    
-    res.json({ success: true, feedback });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '获取反馈详情失败' });
-  }
+    const feedback = await Feedback.findById(req.params.id).populate('user', 'name studentId');
+    if (!feedback) return res.status(404).json({ success: false, message: '反馈不存在' });
+    if (!canReadFeedback(req.user, feedback)) return res.status(403).json({ success: false, message: '无权查看此反馈' });
+    res.json({ success: true, feedback: serializeFeedbackForViewer(feedback, req.user) });
+  } catch (error) { res.status(500).json({ success: false, message: '获取反馈详情失败' }); }
 });
 
 // ================== 管理员API ==================
@@ -5202,40 +5223,14 @@ app.get('/api/admin/feedback-archives', authenticate, adminOnly, async (req, res
 // [修改] 获取所有反馈（管理员）- 支持高级检索与时间归档
 app.get('/api/admin/feedbacks', authenticate, adminOnly, async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page, limit } = paginationOf(req.query);
     const query = buildAdminFeedbackQueryFromRequest(req);
-    
-    // 执行数据库查询
-    const feedbacks = await Feedback.find(query)
-      .populate('user', 'studentId name')
-      .sort({ createdAt: -1 }) // 默认按时间倒序排列
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
-      .lean();
-    
-    // 处理匿名用户显示
-    feedbacks.forEach(f => {
-      if (f.isAnonymous) {
-        f.user = { studentId: '匿名', name: '匿名用户' };
-      }
-    });
-    
+    const summaryQuery = { ...query }; delete summaryQuery.status; delete summaryQuery.priority;
+    const feedbacks = await Feedback.find(query).populate('user', 'studentId name').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
     const total = await Feedback.countDocuments(query);
-    
-    res.json({
-      success: true,
-      feedbacks,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    console.error('获取反馈列表失败:', error); // 增加详细错误日志
-    res.status(500).json({ success: false, message: '获取反馈列表失败' });
-  }
+    const summary = await feedbackSummary(summaryQuery);
+    res.json({ success: true, feedbacks: feedbacks.map(feedback => serializeFeedbackForViewer(feedback, req.user)), summary, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+  } catch (error) { res.status(500).json({ success: false, message: '获取反馈列表失败' }); }
 });
 
 app.get('/api/admin/feedbacks/export', authenticate, adminOnly, async (req, res) => {
@@ -5308,67 +5303,30 @@ app.get('/api/admin/feedbacks/export', authenticate, adminOnly, async (req, res)
 // 更新反馈状态（管理员）
 app.patch('/api/admin/feedback/:id/status', authenticate, adminOnly, async (req, res) => {
   try {
-    // [修改] 接收 attachments
-    const { status, response, attachments, handlingOrganization, handlingDepartment } = req.body;
-    
+    const { status, response, handlingOrganization, handlingDepartment, expectedStatus } = req.body;
     const feedback = await Feedback.findById(req.params.id);
-    
-    if (!feedback) {
-      return res.status(404).json({ success: false, message: '反馈不存在' });
-    }
-
-    if (!ensureFeedbackAccess(req.user, feedback)) {
-      return res.status(403).json({ success: false, message: '无权处理该部门反馈' });
-    }
-    
-    feedback.status = status;
+    if (!feedback) return res.status(404).json({ success: false, message: '反馈不存在' });
+    if (!ensureFeedbackAccess(req.user, feedback) || feedback.isRevoked) return res.status(403).json({ success: false, message: '无权修改此反馈' });
+    const transitions = { pending: ['pending', 'processing', 'resolved', 'rejected'], processing: ['processing', 'resolved', 'rejected'], resolved: ['resolved', 'processing'], rejected: ['rejected', 'processing'] };
+    if (!transitions[feedback.status]?.includes(status)) return res.status(400).json({ success: false, message: '不支持此状态转换' });
+    if (expectedStatus && expectedStatus !== feedback.status) return res.status(409).json({ success: false, message: '反馈状态已更新，请刷新' });
+    const attachments = await validateOwnedAttachments(req.user, req.body.attachments || []);
+    const update = { $set: { status, resolvedAt: status === 'resolved' ? feedback.resolvedAt || new Date() : null }, $push: {} };
     if (handlingOrganization || handlingDepartment) {
-      if (!isValidManagedDepartment({ organization: handlingOrganization, department: handlingDepartment })) {
-        return res.status(400).json({ success: false, message: '处理部门无效' });
-      }
-      const targetScope = { handlingOrganization, handlingDepartment };
-      if (!ensureFeedbackAccess(req.user, targetScope)) {
-        return res.status(403).json({ success: false, message: '无权分配到该部门' });
-      }
-      feedback.handlingOrganization = handlingOrganization;
-      feedback.handlingDepartment = handlingDepartment;
-      feedback.handlingHistory.push({
-        organization: handlingOrganization,
-        department: handlingDepartment,
-        changedBy: req.user._id,
-        note: '更新处理归属部门'
-      });
+      const assignment = { organization: handlingOrganization, department: handlingDepartment };
+      if (!isValidManagedDepartment(assignment)) return res.status(400).json({ success: false, message: '处理部门无效' });
+      if (!ensureFeedbackAccess(req.user, { handlingOrganization, handlingDepartment })) return res.status(403).json({ success: false, message: '无权分配到该部门' });
+      update.$set.handlingOrganization = handlingOrganization; update.$set.handlingDepartment = handlingDepartment;
+      update.$push.handlingHistory = { ...assignment, changedBy: req.user._id, changedAt: new Date(), note: '更新处理归属部门' };
     }
-    
-    // [修改] 如果有文本或有附件，都算作一次有效回复
-    if (response || (attachments && attachments.length > 0)) {
-      feedback.responses.push({
-        content: response ? sanitizeInput(response) : '',
-        adminId: req.user._id,
-        adminName: req.user.name,
-        attachments: attachments || [] // [新增]
-      });
-    }
-    
-   if (status === 'resolved') {
-      feedback.resolvedAt = new Date();
-    }
-    
-    await feedback.save();
-    
-    // [新增] 触发状态更新通知给发帖学生
-    await Notification.create({
-      user: feedback.user,
-      type: 'status_update',
-      content: `您的问题状态更新了：[${feedback.title}] 已变更为或有新回复`
-    });
-  
+    if (response || attachments.length) update.$push.responses = { content: sanitizeInput(response || ''), senderType: req.user.role === 'superadmin' ? 'superadmin' : 'admin', senderName: req.user.name, adminId: req.user._id, adminName: req.user.name, attachments };
+    if (!Object.keys(update.$push).length) delete update.$push;
+    const updated = await Feedback.findOneAndUpdate({ _id: feedback._id, status: expectedStatus || feedback.status, isRevoked: { $ne: true }, updatedAt: feedback.updatedAt }, update, { new: true, runValidators: true });
+    if (!updated) return res.status(409).json({ success: false, message: '反馈已更新，请刷新' });
+    await Notification.create({ user: feedback.user, type: 'status_update', feedbackId: feedback._id, content: `您的问题 [${feedback.title}] 状态更新或有新回复` });
     await logAction(req.user._id, 'update_status', 'feedback', feedback._id, { status }, req);
-    
-    res.json({ success: true, message: '状态更新成功', feedback });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '更新状态失败' });
-  }
+    res.json({ success: true, message: '状态更新成功', feedback: serializeFeedbackForViewer(updated, req.user) });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '更新状态失败' }); }
 });
 // ================== 超级管理员账号管理专属 API ==================
 
@@ -5396,8 +5354,8 @@ app.delete('/api/admin/users/:id', authenticate, adminOnly, async (req, res) => 
       return res.status(403).json({ success: false, message: '不能注销终极管理员账号' });
     }
 
-    // 3. 执行彻底删除
-    await User.findByIdAndDelete(targetUserId);
+    if (targetUser.isUltimateAdmin) return res.status(403).json({ success: false, message: '终极管理员账号不能停用' });
+    await commitUserIdentity(targetUser, { ...buildIdentityUpdate({ memberRole: 'student', positionTitle: 'student' }).update, isActive: false, deactivatedAt: new Date(), tokenVersion: Number(targetUser.tokenVersion || 0) + 1 }, req.user._id);
     
     // 4. 记录高危操作日志
     try {
@@ -5406,7 +5364,7 @@ app.delete('/api/admin/users/:id', authenticate, adminOnly, async (req, res) => 
       console.error('注销日志记录失败:', e);
     }
 
-    res.json({ success: true, message: '账号已成功彻底注销' });
+    res.json({ success: true, message: '账号已停用，历史记录已保留' });
   } catch (error) {
     console.error('注销账号失败:', error);
     res.status(500).json({ success: false, message: '服务器内部错误，注销失败' });
@@ -5491,21 +5449,16 @@ app.patch('/api/admin/users/:studentId/reset-password', authenticate, adminOnly,
       return res.status(404).json({ success: false, message: '找不到该学号的用户' });
     }
 
+    if (!canResetPassword(req.user, user, getUserManagedDepartments(req.user))) return res.status(403).json({ success: false, message: '只能重置分管范围内下级账号，终极管理员请使用受控找回流程' });
     // 修改密码 (User模型会自动加密)
-    user.password = newPassword;
-    
-    // 解锁账户 (如果因为尝试次数过多被锁)
-    user.loginAttempts = 0;
-    user.lockUntil = undefined;
-    
-    await user.save();
+    await setAccountPassword(user, newPassword);
 
     await logAction(req.user._id, 'admin_reset_password', 'user', user._id, { targetStudentId }, req);
 
     res.json({ success: true, message: `用户 ${targetStudentId} 的密码已重置` });
   } catch (error) {
     console.error('重置密码失败:', error);
-    res.status(500).json({ success: false, message: '重置密码失败' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '重置密码失败' });
   }
 });
 // [新增] 修改用户角色（提升为管理员/降级）
@@ -5532,8 +5485,9 @@ app.patch('/api/admin/users/:studentId/role', authenticate, adminOnly, async (re
       return res.status(403).json({ success: false, message: '不能修改终极管理员账号角色' });
     }
 
-    user.role = role;
-    await user.save();
+    const identity = role === 'student' ? buildIdentityUpdate({ memberRole: 'student', positionTitle: 'student' }, req.user._id) : buildIdentityUpdate({ memberRole: 'volunteer', positionTitle: 'volunteer', organization: req.body.organization, department: req.body.department }, req.user._id);
+    if (!identity.valid) return res.status(400).json({ success: false, message: '提升志愿者需要有效部门，请使用身份分配流程' });
+    await commitUserIdentity(user, identity.update, req.user._id);
 
     await logAction(req.user._id, 'change_role', 'user', user._id, { targetStudentId, newRole: role }, req);
 
@@ -5549,9 +5503,7 @@ app.get('/api/admin/stats', authenticate, adminOnly, async (req, res) => {
   try {
     // [新增] 统计时排除被撤回的记录，确保普通管理员和超管看到的数据对齐，或者让其一致反映有效数据
     const baseQuery = { isRevoked: { $ne: true } };
-    if (req.user.role === 'superadmin' && !req.user.isUltimateAdmin) {
-      Object.assign(baseQuery, buildDepartmentScopedQuery(req.user));
-    }
+    Object.assign(baseQuery, buildDepartmentScopedQuery(req.user));
 
     const [
       totalFeedbacks,
@@ -5607,62 +5559,69 @@ app.get('/api/admin/system/config', authenticate, adminOnly, async (req, res) =>
 app.post('/api/admin/system/semester', authenticate, adminOnly, async (req, res) => {
   if (!hasSievoxSemesterAccess(req.user)) return res.status(403).json({ success: false, message: '仅 SIEVOX 管理权限者可开启新学期' });
   try {
-    // [新增] 切换前冻结上一学期名单：若旧学期尚无显式名单，则把其"有效名单"快照存档
-    const oldConfig = await SystemConfig.findOne({ key: 'currentSemester' });
-    const oldSemester = oldConfig ? oldConfig.value : null;
-    if (oldSemester && oldSemester !== req.body.semester) {
-      const existing = await SemesterMember.countDocuments({ semester: oldSemester });
-      if (existing === 0) {
-        const { members } = await resolveSemesterMembers(oldSemester);
-        if (members.length > 0) {
-          await SemesterMember.insertMany(members.map(m => ({
-            volunteer: m._id, semester: oldSemester, name: m.name, studentId: m.studentId, addedBy: req.user._id
-          })), { ordered: false }).catch(() => {});
-        }
-      }
-      await markSemesterManaged(oldSemester);
-    }
-
-    // [新增] 新学期纳入名单管理：名单从空开始，需重新选择(不回退到全部 admin)
-    await markSemesterManaged(req.body.semester);
-    await SystemConfig.findOneAndUpdate({ key: 'currentSemester' }, { value: req.body.semester }, { upsert: true });
+    const semester = sanitizeInput(req.body.semester || '');
+    if (!semester) return res.status(400).json({ success: false, message: '请输入学期名称' });
+    await withWriteLock('system:semester', async () => {
+      const current = await SystemConfig.findOne({ key: 'currentSemester' }).lean();
+      const managed = await SystemConfig.findOne({ key: 'rosterManagedSemesters' }).lean();
+      const oldSemester = current?.value;
+      await withWriteLocks([`performance:${semester}`, ...(oldSemester ? [`performance:${oldSemester}`] : [])], async () => {
+        const oldRoster = oldSemester ? await SemesterMember.find({ semester: oldSemester }).lean() : [];
+        await compensate(async () => {
+          if (oldSemester && oldSemester !== semester) {
+            if (!oldRoster.length) {
+              const { members } = await resolveSemesterMembers(oldSemester);
+              for (const member of members) if (member._id && isValidManagedDepartment(member)) await SemesterMember.updateOne({ volunteer: member._id, semester: oldSemester, organization: member.organization, department: member.department }, { $set: { originalUserId: member._id, name: member.name, studentId: member.studentId, addedBy: req.user._id } }, { upsert: true });
+            }
+            await markSemesterManaged(oldSemester);
+          }
+          await markSemesterManaged(semester);
+          await SystemConfig.findOneAndUpdate({ key: 'currentSemester' }, { value: semester }, { upsert: true });
+        }, async () => {
+          if (oldSemester) { await SemesterMember.deleteMany({ semester: oldSemester }); if (oldRoster.length) await SemesterMember.insertMany(oldRoster); }
+          if (current) await SystemConfig.replaceOne({ key: current.key }, current, { upsert: true }); else await SystemConfig.deleteOne({ key: 'currentSemester' });
+          if (managed) await SystemConfig.replaceOne({ key: managed.key }, managed, { upsert: true }); else await SystemConfig.deleteOne({ key: 'rosterManagedSemesters' });
+        });
+      });
+    });
     res.json({ success: true, message: '新学期已开启' });
-  } catch (error) { res.status(500).json({ success: false }); }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '开启新学期失败，已尝试恢复原数据' }); }
 });
 
 // [新增] 重命名学期 (仅超管)：同步改绩效流水、成员名单、当前学期与受管学期列表
 app.put('/api/admin/system/semester/rename', authenticate, adminOnly, async (req, res) => {
   if (!hasSievoxSemesterAccess(req.user)) return res.status(403).json({ success: false, message: '仅 SIEVOX 管理权限者可重命名学期' });
   try {
-    const { oldName, newName } = req.body;
-    if (!oldName || !newName) return res.status(400).json({ success: false, message: '缺少学期名称' });
-    if (oldName === newName) return res.status(400).json({ success: false, message: '新旧名称相同' });
-
-    // 防止意外合并：若新名称已被使用则拒绝
-    const conflict =
-      (await PerformanceRecord.countDocuments({ semester: newName })) > 0 ||
-      (await SemesterMember.countDocuments({ semester: newName })) > 0 ||
-      (await getManagedSemesters()).includes(newName);
-    const curConfig = await SystemConfig.findOne({ key: 'currentSemester' });
-    if (conflict || (curConfig && curConfig.value === newName)) {
-      return res.status(409).json({ success: false, message: '该学期名称已存在，无法重命名' });
-    }
-
-    // 同步更新所有以学期字符串为键的数据
-    await PerformanceRecord.updateMany({ semester: oldName }, { semester: newName });
-    await SemesterMember.updateMany({ semester: oldName }, { semester: newName });
-    if (curConfig && curConfig.value === oldName) {
-      curConfig.value = newName;
-      await curConfig.save();
-    }
-    const managed = await getManagedSemesters();
-    if (managed.includes(oldName)) {
-      const updated = managed.map(s => (s === oldName ? newName : s));
-      await SystemConfig.findOneAndUpdate({ key: 'rosterManagedSemesters' }, { value: JSON.stringify(updated) }, { upsert: true });
-    }
-
+    const oldName = sanitizeInput(req.body.oldName || ''); const newName = sanitizeInput(req.body.newName || '');
+    if (!oldName || !newName || oldName === newName) return res.status(400).json({ success: false, message: '请输入不同的新旧学期名称' });
+    const liveCohorts = await Cohort.find({ status: { $in: ['draft', 'active'] }, semesters: oldName }).lean();
+    await withWriteLock('system:semester', () => withWriteLocks([...liveCohorts.map(cohort => `cohort:${cohort._id}`), `performance:${oldName}`, `performance:${newName}`], async () => {
+      const current = await SystemConfig.findOne({ key: 'currentSemester' }).lean();
+      const managedConfig = await SystemConfig.findOne({ key: 'rosterManagedSemesters' }).lean();
+      const managed = await getManagedSemesters();
+      if (current?.value === newName || managed.includes(newName) || await PerformanceRecord.exists({ semester: newName }) || await SemesterMember.exists({ semester: newName }) || await PerformanceCalibration.exists({ semester: newName }) || await PerformanceEvaluation.exists({ semester: newName })) throw Object.assign(new Error('该学期名称已存在，无法重命名'), { status: 409 });
+      const collections = [PerformanceRecord, SemesterMember, PerformanceEvaluation];
+      const backups = await Promise.all(collections.map(model => model.find({ semester: oldName }).lean()));
+      const calibrations = await PerformanceCalibration.find({ semester: oldName }).lean();
+      const newCalibrations = calibrations.map(doc => ({ ...doc, _id: `${doc.organization}:${doc.department}:${newName}:${doc.dimension}`, semester: newName }));
+      await compensate(async () => {
+        for (const model of collections) await model.updateMany({ semester: oldName }, { $set: { semester: newName } });
+        if (newCalibrations.length) await PerformanceCalibration.insertMany(newCalibrations);
+        for (const cohort of liveCohorts) await Cohort.updateOne({ _id: cohort._id, status: { $in: ['draft', 'active'] } }, { $set: { semesters: cohort.semesters.map(name => name === oldName ? newName : name) } });
+        await PerformanceCalibration.deleteMany({ _id: { $in: calibrations.map(doc => doc._id) } });
+        if (current?.value === oldName) await SystemConfig.updateOne({ key: 'currentSemester' }, { $set: { value: newName } });
+        if (managed.includes(oldName)) await SystemConfig.updateOne({ key: 'rosterManagedSemesters' }, { $set: { value: JSON.stringify(managed.map(name => name === oldName ? newName : name)) } });
+      }, async () => {
+        for (let index = 0; index < collections.length; index++) for (const doc of backups[index]) await collections[index].replaceOne({ _id: doc._id }, doc);
+        await PerformanceCalibration.deleteMany({ _id: { $in: newCalibrations.map(doc => doc._id) } });
+        for (const doc of calibrations) await PerformanceCalibration.replaceOne({ _id: doc._id }, doc, { upsert: true });
+        for (const cohort of liveCohorts) await Cohort.updateOne({ _id: cohort._id }, { $set: { semesters: cohort.semesters } });
+        if (current) await SystemConfig.replaceOne({ key: current.key }, current);
+        if (managedConfig) await SystemConfig.replaceOne({ key: managedConfig.key }, managedConfig);
+      });
+    }));
     res.json({ success: true, message: '学期名称已更新' });
-  } catch (error) { res.status(500).json({ success: false, message: '重命名失败' }); }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '重命名失败，已尝试恢复原数据' }); }
 });
 
 // [新增] 获取某学期成员名单 (仅超管)
@@ -5680,83 +5639,78 @@ app.get('/api/admin/system/roster', authenticate, adminOnly, async (req, res) =>
 app.post('/api/admin/system/roster', authenticate, adminOnly, async (req, res) => {
   if (!hasSuperadminAccess(req.user)) return res.status(403).json({ success: false, message: '仅负责人可用' });
   try {
-    const { semester, volunteerIds } = req.body;
-    if (!semester) return res.status(400).json({ success: false, message: '缺少学期参数' });
-    const ids = Array.from(new Set((Array.isArray(volunteerIds) ? volunteerIds : []).map(String).filter(Boolean)));
-    const scopedVolunteerIds = await getScopedVolunteerIds(req.user);
-    if (scopedVolunteerIds) {
-      const allowed = new Set(scopedVolunteerIds);
-      const hasOutOfScope = ids.some(id => !allowed.has(id));
-      if (hasOutOfScope) {
-        return res.status(403).json({ success: false, message: '只能维护分管部门内的成员名单' });
-      }
-    }
-
-    // 终极管理员整份替换；普通超级管理员只替换自己分管部门范围内的名单成员。
-    const deleteQuery = { semester };
-    if (scopedVolunteerIds) deleteQuery.volunteer = { $in: scopedVolunteerIds };
-    await SemesterMember.deleteMany(deleteQuery);
-    if (ids.length > 0) {
-      const users = await User.find({ _id: { $in: ids }, role: 'admin' }).select('name studentId');
-      const docs = users.map(u => ({
-        volunteer: u._id, semester, name: u.name, studentId: u.studentId, addedBy: req.user._id
-      }));
-      if (docs.length > 0) await SemesterMember.insertMany(docs);
-    }
-    // [新增] 标记该学期已纳入名单管理：此后"空名单"即真正为空，不再回退到全部 admin
-    await markSemesterManaged(semester);
+    const semester = sanitizeInput(req.body.semester || '');
+    if (!semester) return res.status(400).json({ success: false, message: '缺少学期' });
+    const ids = [...new Set((Array.isArray(req.body.volunteerIds) ? req.body.volunteerIds : []).map(String))];
+    const users = await User.find({ _id: { $in: ids }, memberRole: 'volunteer', role: 'admin', positionTitle: 'volunteer', isActive: true }).lean();
+    if (users.length !== ids.length || users.some(user => !ensureVolunteerDepartmentAccess(req.user, user))) return res.status(403).json({ success: false, message: '只能维护分管部门内的在岗志愿者' });
+    const query = req.user.isUltimateAdmin ? { semester } : { semester, $or: getUserManagedDepartments(req.user).map(({ organization, department }) => ({ organization, department })) };
+    if (!req.user.isUltimateAdmin && !query.$or.length) return res.status(403).json({ success: false, message: '当前没有分管部门' });
+    await replaceRoster(query, users, req.user._id);
     res.json({ success: true, message: '名单已保存' });
-  } catch (error) { res.status(500).json({ success: false, message: '保存名单失败' }); }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '保存名单失败' }); }
 });
 
 // 1. [超管] 批量录入绩效记录 (修复Bug：支持跨学期补录)
 app.post('/api/admin/performance', authenticate, adminOnly, async (req, res) => {
-  if (!hasSuperadminAccess(req.user)) return res.status(403).json({ success: false, message: '仅负责人可用' });
   try {
-    // [修复] 接收前端传来的 targetSemester
-    const { volunteerIds, dimension, score, reason, occurrenceDate, activityName, targetSemester } = req.body;
-    if (!volunteerIds || volunteerIds.length === 0) return res.status(400).json({ success: false, message: '请选择人员' });
-    const ids = Array.from(new Set(volunteerIds.map(String).filter(Boolean)));
-    const volunteerQuery = { _id: { $in: ids }, role: 'admin' };
-    if (!req.user.isUltimateAdmin) Object.assign(volunteerQuery, buildUserDepartmentScopedQuery(req.user));
-    const targetVolunteers = await User.find(volunteerQuery).select('organization department');
-    if (targetVolunteers.length !== ids.length) {
-      return res.status(403).json({ success: false, message: '只能为分管部门内的成员录入绩效' });
-    }
-    const volunteerMap = new Map(targetVolunteers.map(volunteer => [volunteer._id.toString(), volunteer]));
-    
-    const config = await SystemConfig.findOne({ key: 'currentSemester' });
-    const currentSemester = config ? config.value : DEFAULT_CURRENT_SEMESTER;
-    
-    // [修复] 补录时优先使用指定的学期，否则使用当前学期
-    const finalSemester = targetSemester || currentSemester;
-
-    const records = ids.map(vid => {
-      const volunteer = volunteerMap.get(vid);
-      return ({
-      volunteer: vid, recordedBy: req.user._id, dimension, score: Number(score), reason, occurrenceDate, activityName,
-      organization: volunteer?.organization || null,
-      department: volunteer?.department || null,
-      semester: finalSemester // [绑定最终学期]
-    });
-    });
-    await PerformanceRecord.insertMany(records);
+    const assignment = req.params.organization ? { organization: req.params.organization, department: req.params.department } : null;
+    if (assignment && !getDepartmentPerformanceAccess(req.user, assignment)) return res.status(403).json({ success: false, message: '当前身份不能录入该部门绩效' });
+    const records = await createPerformanceRecords(req.user, req.body, assignment);
+    await logAction(req.user._id, 'create_performance_records', 'performanceRecord', req.user._id, { count: records.length }, req);
     res.json({ success: true, message: '绩效录入成功' });
-  } catch (error) { res.status(500).json({ success: false, message: '录入失败' }); }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '绩效录入失败' }); }
+});
+
+
+app.post('/api/admin/performance/calibrate', authenticate, adminOnly, async (req, res) => {
+  try {
+    const semester = sanitizeInput(req.body.semester || '');
+    const dimension = sanitizeInput(req.body.dimension || '');
+    const changes = req.body.calibrations;
+    if (!semester || !dimension || !Array.isArray(changes) || !changes.length || changes.length > 500 || new Set(changes.map(item => String(item.volunteerId))).size !== changes.length) return res.status(400).json({ success: false, message: '校准参数无效' });
+    await withWriteLock(`performance:${semester}`, async () => {
+      const ids = changes.map(item => String(item.volunteerId));
+      const users = await User.find({ _id: { $in: ids }, memberRole: 'volunteer', role: 'admin', positionTitle: 'volunteer', isActive: true }).lean();
+      if (users.length !== ids.length || users.some(user => !ensureVolunteerDepartmentAccess(req.user, user))) throw Object.assign(new Error('无权校准所选成员'), { status: 403 });
+      const assignment = { organization: users[0].organization, department: users[0].department };
+      if (users.some(user => !isSameAssignment(user, assignment))) throw Object.assign(new Error('每批只能校准同一部门'), { status: 400 });
+      const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne(assignment).lean(), assignment.organization, assignment.department);
+      const rule = policy.dimensions.find(item => item.key === dimension);
+      if (!rule) throw Object.assign(new Error('绩效维度无效'), { status: 400 });
+      const query = { semester, dimension, ...assignment };
+      const existing = await loadPerformanceRecords(query);
+      const regular = await PerformanceRecord.find(query).lean();
+      const key = `${assignment.organization}:${assignment.department}:${semester}:${dimension}`;
+      const previous = await PerformanceCalibration.findById(key).lean();
+      const values = new Map((previous?.values || []).map(value => [idOf(value.volunteer), value]));
+      for (const change of changes) {
+        const target = Number(change.targetScore); const expected = Number(change.expectedTotal);
+        if (!Number.isFinite(target) || target < 0 || !Number.isFinite(expected) || (rule.scoringMode === 'capped_additive' && target > rule.maxScore)) throw Object.assign(new Error('目标分数超出维度范围'), { status: 400 });
+        const total = existing.filter(record => idOf(record.volunteer) === String(change.volunteerId)).reduce((sum, record) => sum + Number(record.score), 0);
+        if (Math.abs(total - expected) > 0.000001) throw Object.assign(new Error('成绩已变化，请刷新后重新校准'), { status: 409 });
+        if (!await SemesterMember.exists({ semester, volunteer: change.volunteerId, ...assignment, isActive: { $ne: false } })) throw Object.assign(new Error('成员不在本学期名单中'), { status: 400 });
+        const base = regular.filter(record => idOf(record.volunteer) === String(change.volunteerId)).reduce((sum, record) => sum + Number(record.score), 0);
+        values.set(String(change.volunteerId), { volunteer: change.volunteerId, score: Math.round((target - base) * 1000000) / 1000000 });
+      }
+      await PerformanceCalibration.findOneAndUpdate({ _id: key }, { ...query, values: [...values.values()], recordedBy: req.user._id, updatedAt: new Date() }, { upsert: true, new: true });
+    });
+    await logAction(req.user._id, 'calibrate_performance', 'performanceRecord', req.user._id, { semester, dimension, count: changes.length }, req);
+    res.json({ success: true, message: '成绩已校准' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '校准失败' }); }
 });
 
 // 2. [超管] 获取全员绩效流水 (按学期筛选)
 app.get('/api/admin/performance', authenticate, adminOnly, async (req, res) => {
   if (!hasSuperadminAccess(req.user)) return res.status(403).json({ success: false });
   try {
-    const query = req.query.semester ? { semester: req.query.semester } : {};
-    const scopedVolunteerIds = await getScopedVolunteerIds(req.user);
-    if (scopedVolunteerIds) query.volunteer = { $in: scopedVolunteerIds };
-    const records = await PerformanceRecord.find(query)
-      .populate('volunteer', 'name studentId organization department')
-      .populate('recordedBy', 'name')
-      .sort({ occurrenceDate: -1, createdAt: -1 });
-    res.json({ success: true, records });
+    const query = req.query.semester ? { semester: sanitizeInput(req.query.semester) } : {};
+    if (!req.user.isUltimateAdmin) {
+      const managed = getUserManagedDepartments(req.user);
+      if (!managed.length) return res.json({ success: true, records: [] });
+      query.$or = managed.map(({ organization, department }) => ({ organization, department }));
+    }
+    res.json({ success: true, records: await loadPerformanceRecords(query) });
   } catch (error) { res.status(500).json({ success: false }); }
 });
 
@@ -5764,11 +5718,8 @@ app.get('/api/admin/performance', authenticate, adminOnly, async (req, res) => {
 app.get('/api/admin/performance/my', authenticate, adminOnly, async (req, res) => {
   try {
     const query = { volunteer: req.user._id };
-    if (req.query.semester) query.semester = req.query.semester;
-    const records = await PerformanceRecord.find(query)
-      .populate('recordedBy', 'name')
-      .sort({ occurrenceDate: -1, createdAt: -1 });
-    res.json({ success: true, records });
+    if (req.query.semester) query.semester = sanitizeInput(req.query.semester);
+    res.json({ success: true, records: await loadPerformanceRecords(query) });
   } catch (error) { res.status(500).json({ success: false }); }
 });
 // 4. [新增] [超管] 撤回/删除一条绩效记录
@@ -5780,7 +5731,7 @@ app.delete('/api/admin/performance/:id', authenticate, adminOnly, async (req, re
     if (!ensurePerformanceRecordAccess(req.user, record)) {
       return res.status(403).json({ success: false, message: '无权撤回该部门绩效记录' });
     }
-    await record.deleteOne();
+    await withWriteLock(`performance:${record.semester}`, () => record.deleteOne());
     res.json({ success: true, message: '记录已成功撤回' });
   } catch (error) { res.status(500).json({ success: false, message: '撤回失败' }); }
 });
@@ -5806,49 +5757,40 @@ app.get('/api/admin/ultimate/cohorts', authenticate, adminOnly, ultimateOnly, as
   }
 });
 
-app.post('/api/admin/ultimate/cohorts', authenticate, adminOnly, ultimateOnly, async (req, res) => {
+app.post('/api/admin/ultimate/cohorts', authenticate, ultimateOnly, async (req, res) => {
   try {
     const { name, startDate, endDate, status = 'draft', semesters = [] } = req.body;
+    if (!['draft', 'active'].includes(status)) return res.status(400).json({ success: false, message: '新届次只能是草稿或在任' });
     if (!name) return res.status(400).json({ success: false, message: '请填写届次名称' });
-    if (!['draft', 'active'].includes(status)) {
-      return res.status(400).json({ success: false, message: '届次状态无效' });
-    }
-    if (status === 'active') await Cohort.updateMany({ status: 'active' }, { status: 'draft' });
     const cohort = await Cohort.create({
       name: sanitizeInput(name),
-      startDate,
-      endDate,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
       status,
       semesters: Array.isArray(semesters) ? semesters.map(sanitizeInput).filter(Boolean) : []
     });
-    await logAction(req.user._id, 'create_cohort', 'cohort', cohort._id, { name: cohort.name }, req);
-    res.status(201).json({ success: true, cohort });
+    await logAction(req.user._id, 'create_cohort', 'cohort', cohort._id, { name }, req);
+    res.status(201).json({ success: true, cohort: serializeCohort(cohort) });
   } catch (error) {
     res.status(500).json({ success: false, message: '创建届次失败' });
   }
 });
 
-app.put('/api/admin/ultimate/cohorts/:id', authenticate, adminOnly, ultimateOnly, async (req, res) => {
+app.put('/api/admin/ultimate/cohorts/:id', authenticate, ultimateOnly, async (req, res) => {
   try {
-    const { name, startDate, endDate, status, semesters } = req.body;
-    const cohort = await Cohort.findById(req.params.id);
-    if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
-    if (cohort.status === 'archived') return res.status(400).json({ success: false, message: '已归档届次不可编辑' });
-    if (name) cohort.name = sanitizeInput(name);
-    if (startDate !== undefined) cohort.startDate = startDate || null;
-    if (endDate !== undefined) cohort.endDate = endDate || null;
-    if (Array.isArray(semesters)) cohort.semesters = semesters.map(sanitizeInput).filter(Boolean);
-    if (status) {
-      if (!['draft', 'active'].includes(status)) return res.status(400).json({ success: false, message: '届次状态无效' });
-      if (status === 'active') await Cohort.updateMany({ _id: { $ne: cohort._id }, status: 'active' }, { status: 'draft' });
-      cohort.status = status;
-    }
-    await cohort.save();
-    await logAction(req.user._id, 'update_cohort', 'cohort', cohort._id, { name: cohort.name, status: cohort.status }, req);
-    res.json({ success: true, cohort });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '更新届次失败' });
-  }
+    const cohort = await withWriteLock(`cohort:${req.params.id}`, async () => {
+      const current = await Cohort.findById(req.params.id);
+      if (!current) throw Object.assign(new Error('届次不存在'), { status: 404 });
+      if (['archiving', 'archived'].includes(current.status)) throw Object.assign(new Error('归档届次不可编辑'), { status: 409 });
+      if (req.body.status && !['draft', 'active'].includes(req.body.status)) throw Object.assign(new Error('请使用归档接口冻结届次'), { status: 400 });
+      for (const field of ['name', 'status']) if (req.body[field] !== undefined) current[field] = sanitizeInput(req.body[field]);
+      for (const field of ['startDate', 'endDate']) if (req.body[field] !== undefined) current[field] = req.body[field] ? new Date(req.body[field]) : null;
+      if (Array.isArray(req.body.semesters)) current.semesters = req.body.semesters.map(sanitizeInput).filter(Boolean);
+      await current.save(); return current;
+    });
+    await logAction(req.user._id, 'update_cohort', 'cohort', cohort._id, {}, req);
+    res.json({ success: true, cohort: serializeCohort(cohort) });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '更新届次失败' }); }
 });
 
 app.get('/api/admin/ultimate/cohorts/:id/members', authenticate, adminOnly, ultimateOnly, async (req, res) => {
@@ -5865,118 +5807,48 @@ app.get('/api/admin/ultimate/cohorts/:id/members', authenticate, adminOnly, ulti
   }
 });
 
-app.post('/api/admin/ultimate/cohorts/:id/members', authenticate, adminOnly, ultimateOnly, async (req, res) => {
+app.post('/api/admin/ultimate/cohorts/:id/members', authenticate, ultimateOnly, async (req, res) => {
   try {
-    const cohort = await Cohort.findById(req.params.id);
+    const cohortId = req.body.cohortId || req.params.id;
+    const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
-    if (cohort.status === 'archived') return res.status(400).json({ success: false, message: '已归档届次不可编辑' });
-
-    const {
-      userId,
-      studentId,
-      memberRole,
-      positionTitle,
-      organization,
-      department,
-      managedDepartments = [],
-      startDate,
-      endDate
-    } = req.body;
-    const user = userId ? await User.findById(userId) : await User.findOne({ studentId });
-    if (!user) return res.status(404).json({ success: false, message: '成员账号不存在' });
-
-    const assignment = validateAssignment({ memberRole, positionTitle, organization, department });
-    if (!assignment.valid) return res.status(400).json({ success: false, message: assignment.message });
-
-    const cleanManaged = sanitizeManagedDepartments(managedDepartments, req.user._id);
-    user.role = assignment.accessRole;
-    user.memberRole = memberRole;
-    user.positionTitle = positionTitle;
-    user.organization = assignment.organization;
-    user.department = assignment.department;
-    user.managedDepartments = memberRole === 'presidium' ? cleanManaged : [];
-    await user.save();
-
-    const membership = await CohortMembership.findOneAndUpdate(
-      { cohort: cohort._id, user: user._id },
-      {
-        $set: {
-          cohort: cohort._id,
-          user: user._id,
-          accountSnapshot: {
-            name: user.name,
-            studentId: user.studentId,
-            email: user.email,
-            phone: user.phone
-          },
-          systemRole: user.role,
-          memberRole,
-          positionTitle,
-          organization: assignment.organization,
-          department: assignment.department,
-          managedDepartments: user.managedDepartments
-        },
-        $push: {
-          appointmentHistory: {
-            memberRole,
-            positionTitle,
-            organization: assignment.organization,
-            department: assignment.department,
-            startDate: startDate || cohort.startDate,
-            endDate: endDate || cohort.endDate
-          }
-        }
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-    await logAction(req.user._id, 'upsert_cohort_member', 'cohortMembership', membership._id, {
-      cohort: cohort.name,
-      targetStudentId: user.studentId,
-      positionTitle
-    }, req);
-    res.json({ success: true, user: serializeUser(user), membership });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '保存届次成员失败' });
-  }
+    if (['archiving', 'archived'].includes(cohort.status)) return res.status(409).json({ success: false, message: '归档届次不可继续编辑' });
+    const identity = buildIdentityUpdate(req.body, req.user._id);
+    if (!identity.valid) return res.status(400).json({ success: false, message: identity.message });
+    const studentId = sanitizeInput(req.body.studentId || '');
+    let user = req.body.userId ? await User.findById(req.body.userId) : await User.findOne({ studentId });
+    let newlyCreated = false;
+    if (!user) {
+      if (!isValidStudentId(studentId) || !req.body.password || !req.body.name || !isValidEmail(normalizeEmail(req.body.email))) return res.status(400).json({ success: false, message: '新账号需要10位学号、姓名、有效邮箱和初始密码' });
+      user = await User.create({ studentId, password: req.body.password, name: sanitizeInput(req.body.name), email: normalizeEmail(req.body.email), phone: sanitizeInput(req.body.phone) });
+      newlyCreated = true;
+    }
+    if (user.isUltimateAdmin) return res.status(403).json({ success: false, message: '终极管理员不纳入部门届次名单' });
+    const update = { ...identity.update };
+    for (const field of ['name', 'phone']) if (req.body[field] !== undefined) update[field] = sanitizeInput(req.body[field]);
+    if (req.body.email !== undefined) {
+      const email = normalizeEmail(req.body.email);
+      if (!isValidEmail(email) || await User.exists({ _id: { $ne: user._id }, email })) return res.status(400).json({ success: false, message: '邮箱无效或已被占用' });
+      update.email = email;
+    }
+    const member = await commitUserIdentity(user, update, req.user._id, { cohort, newlyCreated, appointmentStart: req.body.appointmentStart || req.body.startDate, appointmentEnd: req.body.appointmentEnd || req.body.endDate });
+    await logAction(req.user._id, 'upsert_cohort_member', 'cohortMembership', member?._id || user._id, { cohortId }, req);
+    res.json({ success: true, user: serializeUser(user), member: member ? serializeCohortMember(member) : null, membership: member });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '保存届次成员失败' }); }
 });
 
-app.patch('/api/admin/ultimate/users/:studentId/identity', authenticate, adminOnly, ultimateOnly, async (req, res) => {
+app.patch('/api/admin/ultimate/users/:studentId/identity', authenticate, ultimateOnly, async (req, res) => {
   try {
     const user = await User.findOne({ studentId: req.params.studentId });
     if (!user) return res.status(404).json({ success: false, message: '用户不存在' });
-    if (user._id.toString() === req.user._id.toString() && req.body.isUltimateAdmin === false) {
-      return res.status(400).json({ success: false, message: '不能移除当前登录账号的终极管理员权限' });
-    }
-    const {
-      memberRole,
-      positionTitle,
-      organization,
-      department,
-      managedDepartments = [],
-      isUltimateAdmin
-    } = req.body;
-    const assignment = validateAssignment({ memberRole, positionTitle, organization, department });
-    if (!assignment.valid) return res.status(400).json({ success: false, message: assignment.message });
-
-    user.role = assignment.accessRole;
-    user.memberRole = memberRole;
-    user.positionTitle = positionTitle;
-    user.organization = assignment.organization;
-    user.department = assignment.department;
-    user.managedDepartments = memberRole === 'presidium'
-      ? sanitizeManagedDepartments(managedDepartments, req.user._id)
-      : [];
-    if (typeof isUltimateAdmin === 'boolean') user.isUltimateAdmin = isUltimateAdmin;
-    await user.save();
-    await logAction(req.user._id, 'update_identity', 'user', user._id, {
-      targetStudentId: user.studentId,
-      positionTitle,
-      isUltimateAdmin: user.isUltimateAdmin
-    }, req);
+    if (idOf(user) === idOf(req.user) && req.body.isUltimateAdmin === false) return res.status(400).json({ success: false, message: '不能移除当前登录账号的终极管理员权限' });
+    const identity = buildIdentityUpdate(req.body, req.user._id);
+    if (!identity.valid) return res.status(400).json({ success: false, message: identity.message });
+    if (typeof req.body.isUltimateAdmin === 'boolean') identity.update.isUltimateAdmin = req.body.isUltimateAdmin;
+    await commitUserIdentity(user, identity.update, req.user._id);
+    await logAction(req.user._id, 'assign_identity', 'user', user._id, identity.update, req);
     res.json({ success: true, user: serializeUser(user) });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '更新身份失败' });
-  }
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: '身份分配失败' }); }
 });
 
 app.get('/api/admin/ultimate/cohorts/:id/archive-preview', authenticate, adminOnly, ultimateOnly, async (req, res) => {
@@ -5986,9 +5858,9 @@ app.get('/api/admin/ultimate/cohorts/:id/archive-preview', authenticate, adminOn
     const memberships = await CohortMembership.find({ cohort: cohort._id })
       .populate('user', 'name studentId email phone role memberRole positionTitle organization department managedDepartments isUltimateAdmin')
       .lean();
-    const previews = await Promise.all(filterCohortMembershipsForDisplay(memberships, cohort).map(async membership => ({
+    const previews = await Promise.all(memberships.map(async membership => ({
       ...membership,
-      performanceSnapshot: await buildPerformanceSnapshot(membership.user?._id || membership.user, cohort.semesters || [])
+      performanceSnapshot: cohort.status === 'archived' || (membership.endedAt && membership.performanceSnapshot?.archivedAt) ? membership.performanceSnapshot : await buildPerformanceSnapshot(membership.user?._id || membership.user, cohort.semesters || [], membership)
     })));
     res.json({ success: true, cohort, members: previews });
   } catch (error) {
@@ -5996,43 +5868,12 @@ app.get('/api/admin/ultimate/cohorts/:id/archive-preview', authenticate, adminOn
   }
 });
 
-app.post('/api/admin/ultimate/cohorts/:id/archive', authenticate, adminOnly, ultimateOnly, async (req, res) => {
+app.post('/api/admin/ultimate/cohorts/:id/archive', authenticate, ultimateOnly, async (req, res) => {
   try {
-    const cohort = await Cohort.findById(req.params.id);
-    if (!cohort) return res.status(404).json({ success: false, message: '届次不存在' });
-    const memberships = filterCohortMembershipsForDisplay(
-      await CohortMembership.find({ cohort: cohort._id }).populate('user'),
-      cohort
-    );
-    for (const membership of memberships) {
-      if (membership.user) {
-        membership.accountSnapshot = buildMemberSnapshot(membership.user);
-        membership.performanceSnapshot = await buildPerformanceSnapshot(membership.user._id, cohort.semesters || []);
-        if (!membership.user.isUltimateAdmin) {
-          membership.user.role = 'student';
-          membership.user.memberRole = 'student';
-          membership.user.positionTitle = 'student';
-          membership.user.organization = null;
-          membership.user.department = null;
-          membership.user.managedDepartments = [];
-          await membership.user.save();
-        }
-      } else {
-        membership.performanceSnapshot = await buildPerformanceSnapshot(membership.user, cohort.semesters || []);
-      }
-      membership.archivedAt = new Date();
-      membership.archivedBy = req.user._id;
-      await membership.save();
-    }
-    cohort.status = 'archived';
-    cohort.archivedAt = new Date();
-    cohort.archivedBy = req.user._id;
-    await cohort.save();
-    await logAction(req.user._id, 'archive_cohort', 'cohort', cohort._id, { name: cohort.name }, req);
-    res.json({ success: true, message: '届次已归档', cohort, archivedMembers: memberships.length });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '届次归档失败' });
-  }
+    const result = await archiveCohort(req.params.id, req.user._id);
+    await logAction(req.user._id, 'archive_cohort', 'cohort', result.cohort._id, { members: result.archivedMembers }, req);
+    res.json({ success: true, cohort: serializeCohort(result.cohort), archivedMembers: result.archivedMembers, message: '届次已归档' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '归档未完成，请重试同一届次以继续' }); }
 });
 // ============================================
 // 错误处理
@@ -6076,38 +5917,12 @@ const startWechatMpSyncScheduler = () => {
 
 const startServer = async () => {
   try {
-    await mongoose.connect(config.mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    await mongoose.connect(config.mongoUri);
     console.log('✅ MongoDB 连接成功');
     
-    // [修改] 根据环境决定启动 HTTP 还是 HTTPS
-    if (config.nodeEnv === 'production') {
-      // 生产环境：读取 SSL 证书并启动 HTTPS
-    // 1. [新增] 启动 HTTP 服务监听 80 端口，将所有请求强制定向到 HTTPS
-      http.createServer((req, res) => {
-        res.writeHead(301, { "Location": "https://" + req.headers['host'] + req.url });
-        res.end();
-      }).listen(80, () => {
-        console.log(`🚀 生产环境: HTTP 服务器运行在端口 80 (仅用于自动重定向至 HTTPS)`);
-      })
-      const privateKey = fs.readFileSync(config.sslKeyPath, 'utf8');
-      const certificate = fs.readFileSync(config.sslCertPath, 'utf8');
-      const credentials = { key: privateKey, cert: certificate };
-
-      const httpsServer = https.createServer(credentials, app);
-      
-      // HTTPS 默认端口是 443
-      httpsServer.listen(443, () => {
-        console.log(`🚀 生产环境: HTTPS 服务器安全运行在端口 443`);
-      });
-    } else {
-      // 开发环境：使用普通的 HTTP 与当前配置端口
-      app.listen(config.port, () => {
-        console.log(`🚀 开发环境: HTTP 服务器运行在 http://localhost:${config.port}`);
-      });
-    }
+    app.listen(config.port, config.bindHost, () => {
+      console.log(`🚀 HTTP 服务器运行在 http://${config.bindHost}:${config.port}`);
+    });
 
     startWechatMpSyncScheduler();
   } catch (error) {
@@ -6126,6 +5941,8 @@ app.getLoginTokenExpiresIn = getLoginTokenExpiresIn;
 app.isMobileUserAgent = isMobileUserAgent;
 app.shouldPersistLogin = shouldPersistLogin;
 app.filterCohortMembershipsForDisplay = filterCohortMembershipsForDisplay;
+app.backendHelpers = { authenticate, ensureFeedbackAccess, canReadFeedback, buildDepartmentScopedQuery, verifyEmailCode, issueEmailVerification, hashVerificationCode, getFirstAdminResponseAt, buildIdentityUpdate, commitUserIdentity, archiveCohort, replaceRoster, createPerformanceRecords, loadPerformanceRecords, setAccountPassword, saveDepartmentIntroduction, serializePerformanceEvaluation, getDepartmentPerformanceAccess, canSubmitPerformanceEvaluation };
+app.models = { User, Feedback, Cohort, CohortMembership, SemesterMember, PerformanceRecord, PerformanceCalibration, PerformanceEvaluation, DepartmentPerformancePolicy, EmailVerification, VerificationWindow, OperationLock, SystemConfig, RevokedSession, PrivateUpload, Notification, AuditLog, DepartmentIntroduction, DepartmentIntroductionRevision };
 
 if (require.main === module) {
   startServer();

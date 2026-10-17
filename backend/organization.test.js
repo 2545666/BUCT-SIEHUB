@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  canWithdrawSievoxFeedback,
   getHubModuleAccess,
   getIdentityLabel,
   getVolunteerPerformancePolicy,
@@ -9,6 +10,52 @@ const {
   listDepartments,
   validateAssignment
 } = require('./organization');
+
+test('学生本人只能撤回待受理的 SIEVOX 反馈', () => {
+  const student = { _id: 'student-1', role: 'student' };
+
+  assert.equal(canWithdrawSievoxFeedback(student, { user: 'student-1', status: 'pending' }), true);
+  assert.equal(canWithdrawSievoxFeedback(student, { user: 'student-1', status: 'processing' }), false);
+  assert.equal(canWithdrawSievoxFeedback(student, { user: 'student-2', status: 'pending' }), false);
+});
+
+test('学生权益部负责人可以撤回 SIEVOX 反馈', () => {
+  const leader = {
+    role: 'superadmin',
+    memberRole: 'department_lead',
+    positionTitle: 'department_head',
+    organization: 'student_union',
+    department: 'student_rights'
+  };
+
+  assert.equal(canWithdrawSievoxFeedback(leader, { user: 'student-1', status: 'processing' }), true);
+});
+
+test('只有分管学生权益部的主席团成员可以撤回 SIEVOX 反馈', () => {
+  const presidium = {
+    role: 'superadmin',
+    memberRole: 'presidium',
+    positionTitle: 'presidium_member',
+    managedDepartments: [{ organization: 'student_union', department: 'student_rights' }]
+  };
+  const otherPresidium = {
+    ...presidium,
+    managedDepartments: [{ organization: 'student_union', department: 'new_media' }]
+  };
+
+  assert.equal(canWithdrawSievoxFeedback(presidium, { user: 'student-1', status: 'resolved' }), true);
+  assert.equal(canWithdrawSievoxFeedback(otherPresidium, { user: 'student-1', status: 'pending' }), false);
+});
+
+test('普通志愿者、其他部门负责人和终极管理员不能代为撤回 SIEVOX 反馈', () => {
+  const feedback = { user: 'student-1', status: 'pending' };
+  assert.equal(canWithdrawSievoxFeedback({ role: 'admin', memberRole: 'volunteer' }, feedback), false);
+  assert.equal(canWithdrawSievoxFeedback({
+    role: 'superadmin', memberRole: 'department_lead', positionTitle: 'department_head',
+    organization: 'student_union', department: 'new_media'
+  }, feedback), false);
+  assert.equal(canWithdrawSievoxFeedback({ role: 'superadmin', isUltimateAdmin: true }, feedback), false);
+});
 
 test('团委学生兼职团干部只能归属团委部门', () => {
   assert.equal(validateAssignment({
@@ -110,6 +157,7 @@ test('SIEHUB student portals are open while management stays department-scoped',
 
   const leaderAccess = getHubModuleAccess({
     role: 'superadmin',
+    memberRole: 'department_lead',
     positionTitle: 'department_head',
     organization: 'student_union',
     department: 'new_media'
@@ -123,6 +171,7 @@ test('SIEHUB student portals are open while management stays department-scoped',
 
   const presidiumAccess = getHubModuleAccess({
     role: 'superadmin',
+    memberRole: 'presidium',
     positionTitle: 'presidium_member',
     managedDepartments: [{ organization: 'youth_league', department: 'publicity' }]
   });
@@ -144,6 +193,7 @@ test('SIEBridge review capability is limited to ultimate and assigned presidium'
 
   const assignedPresidiumAccess = getHubModuleAccess({
     role: 'superadmin',
+    memberRole: 'presidium',
     positionTitle: 'presidium_member',
     managedDepartments: [{ organization: 'student_union', department: 'academic_technology' }]
   });
@@ -153,6 +203,7 @@ test('SIEBridge review capability is limited to ultimate and assigned presidium'
 
   const departmentHeadAccess = getHubModuleAccess({
     role: 'superadmin',
+    memberRole: 'department_lead',
     positionTitle: 'department_head',
     organization: 'student_union',
     department: 'academic_technology'
@@ -173,4 +224,12 @@ test('all SIEHUB departments inherit the SIEVOX volunteer performance policy', (
     assert.deepEqual(policy.dimensions.map(item => item.key), expectedKeys);
     assert.deepEqual(policy.dimensions.map(item => item.maxScore), [20, 35, 25, 15, 5, null]);
   });
+});
+
+test('a downgraded or incomplete identity cannot retain management through an old title or scope', () => {
+  for (const identity of [
+    { role: 'student', memberRole: 'department_lead', positionTitle: 'department_head', organization: 'student_union', department: 'student_rights' },
+    { role: 'superadmin', memberRole: 'student', positionTitle: 'presidium_member', managedDepartments: [{ organization: 'student_union', department: 'student_rights' }] },
+    { role: 'admin', memberRole: 'student', positionTitle: 'volunteer', organization: 'student_union', department: 'student_rights' }
+  ]) assert.ok(getHubModuleAccess(identity).every(module => module.accessLevel === 'student'));
 });

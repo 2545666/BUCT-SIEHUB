@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   Copy,
@@ -12,7 +12,8 @@ import {
   UploadCloud,
   Video
 } from 'lucide-react';
-import { API_BASE } from './api';
+import { API_BASE, requestJson, resolveMediaUrl } from './api';
+import { shouldReplaceEditorContent, canvasPreviewScale } from './feedbackState';
 
 const EXTERNAL_DEPARTMENT_INTRO_URLS = {};
 
@@ -121,7 +122,7 @@ const FieldPair = ({ label, value = {}, onChange, textarea = false, language = '
 };
 
 const getBackgroundBlockProps = (block, defaultTone) => {
-  const url = block.data?.backgroundImageUrl || '';
+  const url = resolveMediaUrl(block.data?.backgroundImageUrl || '');
   const textTone = ['light', 'dark'].includes(block.data?.textTone) ? block.data.textTone : defaultTone;
   const opacity = Number.isFinite(Number(block.data?.overlayOpacity)) ? Math.max(0, Math.min(0.9, Number(block.data.overlayOpacity))) : 0;
   if (!url) return { className: `tone-${textTone}`, style: undefined };
@@ -162,7 +163,7 @@ const BlockPreview = ({ block, language = 'zh' }) => {
     return (
       <section className="dept-intro-page-section media">
         <h2>{title}</h2>
-        {block.data?.url ? <img src={block.data.url} alt={getText(block.data?.alt, language) || title} /> : <div className="dept-intro-media-empty"><ImagePlus />{language === 'en' ? 'No image uploaded' : '未上传图片'}</div>}
+        {block.data?.url ? <img src={resolveMediaUrl(block.data.url)} alt={getText(block.data?.alt, language) || title} /> : <div className="dept-intro-media-empty"><ImagePlus />{language === 'en' ? 'No image uploaded' : '未上传图片'}</div>}
         {getText(block.data?.caption, language) && <p>{getText(block.data.caption, language)}</p>}
       </section>
     );
@@ -171,7 +172,7 @@ const BlockPreview = ({ block, language = 'zh' }) => {
     return (
       <section className="dept-intro-page-section media">
         <h2>{title}</h2>
-        {block.data?.url ? <video src={block.data.url} controls preload="metadata" /> : <div className="dept-intro-media-empty"><Video />{language === 'en' ? 'No video uploaded' : '未上传视频'}</div>}
+        {block.data?.url ? <video src={resolveMediaUrl(block.data.url)} controls preload="metadata" /> : <div className="dept-intro-media-empty"><Video />{language === 'en' ? 'No video uploaded' : '未上传视频'}</div>}
         {getText(block.data?.caption, language) && <p>{getText(block.data.caption, language)}</p>}
       </section>
     );
@@ -423,7 +424,7 @@ const departmentCanvasPalette = (module) => {
 
 const canvasElementStyle = (element, scale = 1) => {
   const style = element.style || {};
-  const backgroundImage = style.backgroundImageUrl ? `url("${style.backgroundImageUrl}")` : undefined;
+  const backgroundImage = style.backgroundImageUrl ? `url("${resolveMediaUrl(style.backgroundImageUrl)}")` : undefined;
   return {
     left: `${(Number(style.x) || 0) * scale}px`,
     top: `${(Number(style.y) || 0) * scale}px`,
@@ -465,7 +466,7 @@ const CanvasElementPreview = ({ element, language = 'zh', scale = 1, selected = 
     >
       {style.backgroundImageUrl && <span className="dept-intro-slide-overlay" style={overlayStyle} />}
       {element.type === 'text' && <div className="dept-intro-slide-text">{getText(element.content?.text, language)}</div>}
-      {element.type === 'image' && (element.content?.url ? <img src={element.content.url} alt={getText(element.content.alt, language) || getText(element.content.title, language)} style={{ objectFit: style.objectFit || 'cover', objectPosition: style.objectPosition || 'center' }} /> : <div className="dept-intro-slide-empty"><ImagePlus />图片占位</div>)}
+      {element.type === 'image' && (element.content?.url ? <img src={resolveMediaUrl(element.content.url)} alt={getText(element.content.alt, language) || getText(element.content.title, language)} style={{ objectFit: style.objectFit || 'cover', objectPosition: style.objectPosition || 'center' }} /> : <div className="dept-intro-slide-empty"><ImagePlus />图片占位</div>)}
       {element.type === 'shape' && getText(element.content?.label, language) && <div>{getText(element.content.label, language)}</div>}
       {element.type === 'card' && <div className="dept-intro-slide-card-copy"><strong>{getText(element.content?.title, language)}</strong><p>{getText(element.content?.body, language)}</p></div>}
       {element.type === 'activity' && <div className="dept-intro-slide-card-copy"><small>{getText(element.content?.kicker, language)} / {getText(element.content?.date, language)}</small><strong>{getText(element.content?.title, language)}</strong><p>{getText(element.content?.body, language)}</p></div>}
@@ -484,7 +485,7 @@ const CanvasPagePreview = ({ page, language = 'zh', scale = 1, selectedElementId
     width: `${page.width * scale}px`,
     height: `${page.height * scale}px`,
     backgroundColor: page.backgroundColor || '#f8fafc',
-    backgroundImage: page.backgroundImageUrl ? `url("${page.backgroundImageUrl}")` : undefined,
+    backgroundImage: page.backgroundImageUrl ? `url("${resolveMediaUrl(page.backgroundImageUrl)}")` : undefined,
     backgroundSize: page.backgroundSize || 'cover',
     backgroundPosition: page.backgroundPosition || 'center'
   };
@@ -507,6 +508,19 @@ const CanvasPagePreview = ({ page, language = 'zh', scale = 1, selectedElementId
       ))}
     </section>
   );
+};
+
+const ResponsiveCanvasPages = ({ pages, language }) => {
+  const container = useRef(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const measure = () => setWidth(container.current?.clientWidth || 0);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container.current);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={container} className="dept-intro-slide-viewer">{width > 0 && pages.map(page => <CanvasPagePreview key={page.id} page={page} language={language} scale={canvasPreviewScale(width, page.width)} />)}</div>;
 };
 
 export const DepartmentIntroductionViewer = ({ module, token, language = 'zh' }) => {
@@ -569,9 +583,7 @@ export const DepartmentIntroductionViewer = ({ module, token, language = 'zh' })
         <>
           {!intro?.hasPublished && <div className="dept-intro-status">{language === 'en' ? 'This department has not published a custom introduction page yet. The default template is shown.' : '该部门暂未发布自定义介绍页，当前显示默认模板。'}</div>}
           {Array.isArray(content.pages) && content.pages.length ? (
-            <div className="dept-intro-slide-viewer">
-              {content.pages.map(page => <CanvasPagePreview key={page.id} page={page} language={language} scale={Math.min(1, 1100 / (page.width || 1440))} />)}
-            </div>
+            <ResponsiveCanvasPages pages={content.pages} language={language} />
           ) : (
             (content.blocks || []).map(block => <BlockPreview key={block.id} block={block} language={language} />)
           )}
@@ -596,6 +608,10 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
   const [selectedElementId, setSelectedElementId] = useState('');
   const [message, setMessage] = useState('');
   const [revisions, setRevisions] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [conflict, setConflict] = useState(false);
+  const writeInFlight = useRef(false);
 
   useEffect(() => {
     if (externalEditorDisabled) {
@@ -604,6 +620,8 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
     }
     let cancelled = false;
     setLoading(true);
+    setLoaded(false);
+    setMessage('');
     fetch(`${API_BASE}/hub/departments/${module.organization}/${module.key}/introduction/editor`, {
       headers: { Authorization: `Bearer ${token}` }
     })
@@ -611,6 +629,7 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
       .then(data => {
         if (cancelled) return;
         if (!data.success) throw new Error(data.message || '获取编辑数据失败');
+        if (!data.introduction || !Number.isFinite(data.introduction.draftVersion)) throw new Error('编辑版本未载入，请重新加载');
         const nextContent = ensureCanvasContent(data.introduction?.content || defaultContent(module), module);
         setIntro(data.introduction);
         setContent(nextContent);
@@ -618,6 +637,8 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
         setSelectedPageId(nextContent.pages?.[0]?.id || '');
         setSelectedElementId(nextContent.pages?.[0]?.elements?.[0]?.id || '');
         setRevisions(data.revisions || []);
+        setLoaded(true);
+        setConflict(false);
       })
       .catch(error => {
         if (!cancelled) setMessage(error.message || '获取编辑数据失败');
@@ -628,7 +649,7 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
     return () => {
       cancelled = true;
     };
-  }, [externalEditorDisabled, module.organization, module.key, token]);
+  }, [externalEditorDisabled, module.organization, module.key, token, loadAttempt]);
 
   const blocks = content.blocks || [];
   const selectedBlock = useMemo(() => blocks.find(block => block.id === selectedId) || blocks[0], [blocks, selectedId]);
@@ -673,44 +694,50 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
   };
 
   const saveDraft = async () => {
+    if (!loaded || conflict || writeInFlight.current) return;
+    writeInFlight.current = true;
+    const submitted = content;
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/hub/departments/${module.organization}/${module.key}/introduction/draft`, {
+      const data = await requestJson(`/hub/departments/${module.organization}/${module.key}/introduction/draft`, token, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ baseVersion: intro?.draftVersion || 0, content })
+        body: JSON.stringify({ baseVersion: intro.draftVersion, content: submitted })
       });
-      const data = await res.json();
       if (!data.success) throw new Error(data.message || '保存草稿失败');
       setIntro(data.introduction);
-      setContent(data.introduction?.content || content);
+      setContent(current => shouldReplaceEditorContent(submitted, current) ? (data.introduction?.content || submitted) : current);
       setMessage(isEnglish ? 'Draft saved.' : '草稿已保存。');
     } catch (error) {
+      if (error.status === 409) setConflict(true);
       setMessage(error.message || '保存草稿失败');
     } finally {
+      writeInFlight.current = false;
       setSaving(false);
     }
   };
 
   const publish = async () => {
+    if (!loaded || conflict || writeInFlight.current) return;
     if (!window.confirm(isEnglish ? 'Publish this department introduction page now? Students will see it immediately.' : '确认发布该部门介绍页吗？学生端将立即看到最新内容。')) return;
     setPublishing(true);
+    writeInFlight.current = true;
+    const submitted = content;
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/hub/departments/${module.organization}/${module.key}/introduction/publish`, {
+      const data = await requestJson(`/hub/departments/${module.organization}/${module.key}/introduction/publish`, token, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reason: '管理端发布', content })
+        body: JSON.stringify({ reason: '管理端发布', baseVersion: intro.draftVersion, content: submitted })
       });
-      const data = await res.json();
       if (!data.success) throw new Error(data.message || '发布失败');
       setIntro(data.introduction);
-      setContent(data.introduction?.content || content);
+      setContent(current => shouldReplaceEditorContent(submitted, current) ? (data.introduction?.content || submitted) : current);
       setMessage(isEnglish ? 'Department intro page published.' : '部门介绍页已发布。');
     } catch (error) {
+      if (error.status === 409) setConflict(true);
       setMessage(error.message || '发布失败');
     } finally {
+      writeInFlight.current = false;
       setPublishing(false);
     }
   };
@@ -973,8 +1000,9 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
           </div>
           <div>
             <button type="button" onClick={onClose}>{isEnglish ? 'Back to manage portal' : '返回管理端'}</button>
-            <button type="button" onClick={saveDraft} disabled={saving}><Save />{saving ? (isEnglish ? 'Saving' : '保存中') : (isEnglish ? 'Save draft' : '保存草稿')}</button>
-            <button className="primary-button" type="button" onClick={publish} disabled={publishing}><Send />{publishing ? (isEnglish ? 'Publishing' : '发布中') : (isEnglish ? 'Publish' : '发布')}</button>
+            {(!loaded || conflict) && <button type="button" disabled={loading || saving || publishing} onClick={() => { if (!conflict || window.confirm('重新加载会替换当前未保存内容，确认继续？')) setLoadAttempt(value => value + 1); }}>重新加载</button>}
+            <button type="button" onClick={saveDraft} disabled={!loaded || conflict || saving || publishing || Boolean(uploadingBlockId)}><Save />{saving ? (isEnglish ? 'Saving' : '保存中') : (isEnglish ? 'Save draft' : '保存草稿')}</button>
+            <button className="primary-button" type="button" onClick={publish} disabled={!loaded || conflict || saving || publishing || Boolean(uploadingBlockId)}><Send />{publishing ? (isEnglish ? 'Publishing' : '发布中') : (isEnglish ? 'Publish' : '发布')}</button>
           </div>
         </div>
         {message && <div className="dept-intro-status">{message}</div>}
@@ -1357,8 +1385,9 @@ export const DepartmentIntroductionEditor = ({ module, token, language = 'zh', o
         </div>
         <div>
           <button type="button" onClick={onClose}>{isEnglish ? 'Back to manage portal' : '返回管理端'}</button>
-          <button type="button" onClick={saveDraft} disabled={saving}><Save />{saving ? (isEnglish ? 'Saving' : '保存中') : (isEnglish ? 'Save draft' : '保存草稿')}</button>
-          <button className="primary-button" type="button" onClick={publish} disabled={publishing}><Send />{publishing ? (isEnglish ? 'Publishing' : '发布中') : (isEnglish ? 'Publish' : '发布')}</button>
+            {(!loaded || conflict) && <button type="button" disabled={loading || saving || publishing} onClick={() => { if (!conflict || window.confirm('重新加载会替换当前未保存内容，确认继续？')) setLoadAttempt(value => value + 1); }}>重新加载</button>}
+          <button type="button" onClick={saveDraft} disabled={!loaded || conflict || saving || publishing || Boolean(uploadingBlockId)}><Save />{saving ? (isEnglish ? 'Saving' : '保存中') : (isEnglish ? 'Save draft' : '保存草稿')}</button>
+          <button className="primary-button" type="button" onClick={publish} disabled={!loaded || conflict || saving || publishing || Boolean(uploadingBlockId)}><Send />{publishing ? (isEnglish ? 'Publishing' : '发布中') : (isEnglish ? 'Publish' : '发布')}</button>
         </div>
       </div>
       {message && <div className="dept-intro-status">{message}</div>}

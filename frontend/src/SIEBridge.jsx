@@ -7,6 +7,7 @@ import {
 import { API_BASE } from './api';
 import siebridgeLogo from './assets/SIEBridge_LOGO.png';
 import { getSieBridgeEntityId, shouldApplyCourseDetailResponse } from './siebridgeSelection';
+import { isMarkdownFile, isPlainTextFile } from './siebridgeFileType';
 import './siebridge.css';
 
 const STATUS_META = {
@@ -254,9 +255,8 @@ const renderReceiptPdfBlob = async (receipt) => {
 };
 
 const getEntityId = getSieBridgeEntityId;
-const isMarkdownFile = (file = {}) => ['.md', '.markdown'].includes(String(file.extension || '').toLowerCase()) || /markdown|text\/plain/i.test(file.mimetype || '');
 const isPdfFile = (file = {}) => String(file.extension || '').toLowerCase() === '.pdf' || file.mimetype === 'application/pdf';
-const isPreviewableFile = (file = {}) => isPdfFile(file) || isMarkdownFile(file);
+const isPreviewableFile = (file = {}) => isPdfFile(file) || isMarkdownFile(file) || isPlainTextFile(file);
 const getFilePath = (file = {}) => file.webkitRelativePath || file.relativePath || file.originalName || file.filename || file.name || '';
 const getFileName = (file = {}) => file.originalName || file.filename || file.name || getFilePath(file).split('/').pop() || 'resource-file';
 
@@ -478,14 +478,14 @@ const SIEBridgePreviewDialog = ({ preview, onClose }) => {
   if (!preview) return null;
   return (
     <div className="siebridge-preview">
-      <dialog open className={preview.type === 'markdown' ? 'markdown-preview' : ''}>
+      <dialog open className={preview.type === 'markdown' || preview.type === 'text' ? 'markdown-preview' : ''}>
         <header>
           <strong>{preview.title}</strong>
           <button className="icon-button" type="button" onClick={onClose}><X /></button>
         </header>
         {preview.type === 'markdown' ? (
           <MarkdownRenderer content={preview.content} />
-        ) : (
+        ) : preview.type === 'text' ? <pre className="siebridge-markdown-body" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.content}</pre> : (
           <iframe src={preview.url} title={preview.title}></iframe>
         )}
       </dialog>
@@ -641,7 +641,7 @@ const FileTreeNode = ({
             <FileText />
             <span title={getFilePath(file)}>{getFileName(file)}</span>
             <em>{formatFileSize(file.size)}</em>
-            {previewable && <button type="button" title={isMarkdownFile(file) ? '渲染 Markdown' : '预览 PDF'} onClick={() => onPreview(file)}><Eye /></button>}
+            {previewable && <button type="button" title={isMarkdownFile(file) ? '渲染 Markdown' : isPlainTextFile(file) ? '预览文本' : '预览 PDF'} onClick={() => onPreview(file)}><Eye /></button>}
             <button type="button" title="下载文件" onClick={() => onDownload(file)}><Download /></button>
             {onDelete && <button type="button" className="danger" title="删除文件" disabled={isDeletingFile?.(file)} onClick={() => onDelete(file)}><Trash2 /></button>}
           </div>
@@ -766,7 +766,7 @@ const getSubmitLabel = (submitting, uploadProgress) => {
   return '提交中...';
 };
 
-const CourseForm = ({ meta, onClose, onSubmit, submitting, error, uploadProgress }) => {
+const CourseForm = ({ meta, onClose, onSubmit, submitting, error, uploadProgress, initialCourse }) => {
   const [form, setForm] = useState({
     code: '',
     name: '',
@@ -775,7 +775,8 @@ const CourseForm = ({ meta, onClose, onSubmit, submitting, error, uploadProgress
     gradeLevels: [],
     section: 'past_exams',
     title: '',
-    description: ''
+    description: '',
+    ...(initialCourse ? { code: initialCourse.code, name: initialCourse.name, courseNature: initialCourse.courseNature, majors: initialCourse.majors || [], gradeLevels: initialCourse.gradeLevels || [] } : {})
   });
   const [files, setFiles] = useState([]);
 
@@ -797,11 +798,11 @@ const CourseForm = ({ meta, onClose, onSubmit, submitting, error, uploadProgress
     <div className="siebridge-drawer">
       <form className="siebridge-panel" onSubmit={submit}>
         <header className="siebridge-panel-head">
-          <div><span>NEW COURSE</span><h3>添加课程并上传资料</h3></div>
+          <div><span>NEW COURSE</span><h3>{initialCourse ? '修改并重新提交课程' : '添加课程并上传资料'}</h3></div>
           <button type="button" className="icon-button" onClick={onClose}><X /></button>
         </header>
         <div className="siebridge-form-grid">
-          <label><span>课程代码</span><input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="如 MECH101" required /></label>
+          <label><span>课程代码</span><input value={form.code} readOnly={Boolean(initialCourse)} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="如 MECH101" required /></label>
           <label><span>课程名称</span><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="请输入课程名称" required /></label>
           <label><span>课程性质</span><input value={form.courseNature} onChange={e => setForm({ ...form, courseNature: e.target.value })} placeholder="上传者自行填写，如专业必修/公共选修" required /></label>
           <label><span>资料标题</span><input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="如 2024 春季期末真题" required /></label>
@@ -918,7 +919,10 @@ const SIEBridgeMyWindow = ({
   onClose,
   onPreview,
   onDownload,
-  onDownloadPdf
+  onDownloadPdf,
+  onResubmitCourse,
+  onDeleteResource,
+  deletingResourceId
 }) => {
   const uploadItems = useMemo(() => (submissions.resources || [])
     .map(item => ({
@@ -953,6 +957,10 @@ const SIEBridgeMyWindow = ({
         </header>
         <div className="siebridge-my-grid">
           <section className="siebridge-my-block">
+            <header><div><p>MY COURSES</p><h4>我的课程申请</h4></div><BookOpen /></header>
+            {(submissions.courses || []).map(course => <article key={getEntityId(course)}><strong>{course.code} · {course.name}</strong><StatusBadge status={course.status} />{course.reviewComment && <p>{course.reviewComment}</p>}{course.status === 'rejected' && <button type="button" onClick={() => onResubmitCourse(course)}>修改并重新提交</button>}</article>)}
+          </section>
+          <section className="siebridge-my-block">
             <header><div><p>MY UPLOADS</p><h4>我的上传资料</h4></div><Clock3 /></header>
             <div className="siebridge-my-list">
               {uploadItems.length ? uploadItems.map(item => (
@@ -969,6 +977,7 @@ const SIEBridgeMyWindow = ({
                 <h5>{activeUpload.title}</h5>
                 <p>{[activeUpload.courseCode, activeUpload.courseName, activeUpload.sectionLabel].filter(Boolean).join(' · ')}</p>
                 <ResourceFileBrowser resource={activeUpload} onPreview={onPreview} onDownload={onDownload} />
+                {['pending', 'rejected'].includes(activeUpload.status) && <button type="button" disabled={deletingResourceId === getEntityId(activeUpload)} onClick={() => onDeleteResource(activeUpload)}><Trash2 />删除我的资料</button>}
               </div>
             )}
           </section>
@@ -1003,6 +1012,8 @@ export const SIEBridgeStudentPortal = ({ token }) => {
   const [courseFormOpen, setCourseFormOpen] = useState(false);
   const [resourceFormCourse, setResourceFormCourse] = useState(null);
   const [myWindowOpen, setMyWindowOpen] = useState(false);
+  const [resubmissionCourse, setResubmissionCourse] = useState(null);
+  const [deletingResourceId, setDeletingResourceId] = useState('');
   const [receiptPromptOpen, setReceiptPromptOpen] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -1171,7 +1182,7 @@ export const SIEBridgeStudentPortal = ({ token }) => {
       if (preview?.url) URL.revokeObjectURL(preview.url);
       const contentType = res.headers.get('content-type') || '';
       if (isMarkdownFile(file) || /markdown|text\/plain/i.test(contentType)) {
-        setPreview({ title: `${resource.title} / ${getFileName(file)}`, type: 'markdown', content: await res.text() });
+        setPreview({ title: `${resource.title} / ${getFileName(file)}`, type: isMarkdownFile(file) || /markdown/i.test(contentType) ? 'markdown' : 'text', content: await res.text() });
         return;
       }
       const blob = await res.blob();
@@ -1220,6 +1231,20 @@ export const SIEBridgeStudentPortal = ({ token }) => {
     ...submissions.resources.map(item => ({ ...item, kind: '资料', courseName: item.course?.name }))
   ].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 
+  const resubmitCourse = course => { setResubmissionCourse(course); setCourseFormOpen(true); setMyWindowOpen(false); };
+  const deleteOwnResource = async resource => {
+    if (deletingResourceId) return;
+    const confirmation = window.prompt(`请输入资料标题确认删除：\n${resource.title}`);
+    if (confirmation?.trim() !== resource.title) return;
+    setDeletingResourceId(getEntityId(resource));
+    try {
+      await apiJson(`/siebridge/resources/${getEntityId(resource)}`, token, { method: 'DELETE', body: JSON.stringify({ confirmation: confirmation.trim() }) });
+      setMessage('资料已删除');
+      await loadSubmissions();
+    } catch (error) { setMessage(error.message); }
+    finally { setDeletingResourceId(''); }
+  };
+
   return (
     <section className="siebridge-shell">
       <div className="siebridge-toolbar">
@@ -1229,7 +1254,7 @@ export const SIEBridgeStudentPortal = ({ token }) => {
         </div>
         <div className="siebridge-toolbar-actions">
           <button className="outline-button" type="button" onClick={openMyWindow}><FileText />我的</button>
-          <button className="primary-button" type="button" onClick={() => setCourseFormOpen(true)}><Plus />添加课程</button>
+          <button className="primary-button" type="button" onClick={() => { setResubmissionCourse(null); setCourseFormOpen(true); }}><Plus />添加课程</button>
         </div>
       </div>
       <div className="siebridge-searchbar">
@@ -1272,13 +1297,16 @@ export const SIEBridgeStudentPortal = ({ token }) => {
       </div>
       <section className="siebridge-submissions">
         <header><div><p>MY SUBMISSIONS</p><h3>我的上传审核情况</h3></div><Clock3 /></header>
-        <div>{submissionItems.length ? submissionItems.slice(0, 8).map(item => <article key={`${item.kind}-${item.id || item._id}`}><span>{item.kind}</span><strong>{item.name || item.title}</strong><small>{item.courseName || item.code || ''}</small><StatusBadge status={item.status} />{item.reviewComment && <em>{item.reviewComment}</em>}</article>) : <p className="siebridge-muted">暂无提交记录</p>}</div>
+        <div>{submissionItems.length ? submissionItems.map(item => <article key={`${item.kind}-${item.id || item._id}`}><span>{item.kind}</span><strong>{item.name || item.title}</strong><small>{item.courseName || item.code || ''}</small><StatusBadge status={item.status} />{item.reviewComment && <em>{item.reviewComment}</em>}{item.kind === '课程' && item.status === 'rejected' && <button type="button" onClick={() => resubmitCourse(item)}>修改并重新提交</button>}{item.kind === '资料' && ['pending', 'rejected'].includes(item.status) && <button type="button" disabled={Boolean(deletingResourceId)} onClick={() => deleteOwnResource(item)}><Trash2 />删除</button>}</article>) : <p className="siebridge-muted">暂无提交记录</p>}</div>
       </section>
-      {courseFormOpen && <CourseForm meta={meta} onClose={() => setCourseFormOpen(false)} onSubmit={submitCourse} submitting={submitting} error={message} uploadProgress={uploadProgress} />}
+      {courseFormOpen && <CourseForm initialCourse={resubmissionCourse} meta={meta} onClose={() => setCourseFormOpen(false)} onSubmit={submitCourse} submitting={submitting} error={message} uploadProgress={uploadProgress} />}
       {resourceFormCourse && <ResourceForm course={resourceFormCourse} meta={meta} onClose={() => setResourceFormCourse(null)} onSubmit={submitResource} submitting={submitting} error={message} uploadProgress={uploadProgress} />}
       <SIEBridgeReceiptPrompt open={receiptPromptOpen} onClose={() => setReceiptPromptOpen(false)} />
       {myWindowOpen && (
         <SIEBridgeMyWindow
+          onResubmitCourse={resubmitCourse}
+          onDeleteResource={deleteOwnResource}
+          deletingResourceId={deletingResourceId}
           submissions={submissions}
           receipts={receipts}
           selectedReceiptId={selectedReceiptId}
@@ -1347,7 +1375,7 @@ export const SIEBridgeReviewWorkspace = ({ token }) => {
       if (preview?.url) URL.revokeObjectURL(preview.url);
       const contentType = res.headers.get('content-type') || '';
       if (isMarkdownFile(file) || contentType.includes('markdown') || contentType.includes('text/plain')) {
-        setPreview({ title: `${resource.title} / ${getFileName(file)}`, type: 'markdown', content: await res.text() });
+        setPreview({ title: `${resource.title} / ${getFileName(file)}`, type: isMarkdownFile(file) || contentType.includes('markdown') ? 'markdown' : 'text', content: await res.text() });
         return;
       }
       const blob = await res.blob();
@@ -1505,7 +1533,7 @@ export const SIEBridgeReviewWorkspace = ({ token }) => {
                   onBatchDelete={() => batchDeleteApprovedResourceFiles(item)}
                   isBatchDeleting={batchDeletingResourceId === (item.id || item._id)}
                 />
-                {status === 'approved' && <button type="button" className="danger" disabled={deletingResourceId === (item.id || item._id)} onClick={() => deleteApprovedResource(item)}><Trash2 />{deletingResourceId === (item.id || item._id) ? '删除中' : '删除'}</button>}
+                <button type="button" className="danger" disabled={deletingResourceId === (item.id || item._id)} onClick={() => deleteApprovedResource(item)}><Trash2 />{deletingResourceId === (item.id || item._id) ? '删除中' : '删除'}</button>
               </div>
             )}
             {status === 'pending' && <footer><button type="button" onClick={() => review(item.type, item.id || item._id, 'approved')}><Check />通过</button><button type="button" className="danger" onClick={() => review(item.type, item.id || item._id, 'rejected')}><X />驳回</button></footer>}
