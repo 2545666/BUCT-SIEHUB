@@ -113,6 +113,9 @@ test('read-only workbench shares one monthly result and never modifies a roster 
   assert.deepEqual(own.body.members.map(u => u.id), [first._id]);
   assert.equal(own.body.members[0].canSelf, true);
   assert.equal(own.body.members[0].canGrade, false);
+  assert.equal(own.body.access.viewerRole, 'volunteer');
+  assert.equal(result.body.access.viewerRole, 'ultimate_admin');
+  assert.equal((await h.request('GET', 'workbench', leader, {}, { month: '2026-10' })).body.access.viewerRole, 'department_lead');
 });
 
 test('department heads see volunteer rankings but cannot read another leader score', async t => {
@@ -177,6 +180,12 @@ test('standards validate totals and grade details against their exact configurat
 });
 
 const html = fs.readFileSync(path.join(__dirname, '../frontend/public/culture-sports-arts/performance/index.html'), 'utf8');
+test('monthly performance opens in the site without a blocked iframe or a second password gate', () => {
+  const appPage = fs.readFileSync(path.join(__dirname, '../frontend/src/App.jsx'), 'utf8');
+  assert.doesNotMatch(appPage, /siehub-special-performance-frame|DepartmentMonthlyPerformanceWorkspace/);
+  assert.match(appPage, /DepartmentMonthlyWorkspace/);
+  assert.doesNotMatch(html, /id="gateMask"|id="pinMask"|请输入访问密码/);
+});
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 function page(search = '') {
   const elements = new Map(), storage = new Map();

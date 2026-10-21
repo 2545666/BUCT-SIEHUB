@@ -243,8 +243,9 @@ const installCulturePerformanceRoutes = ({ app, authenticate, logAction, User, C
         const target = members.find(member => String(member._id) === targetId) || score.targetSnapshot;
         return target && canGrade(req.user, target, scope);
       }) : scores;
+      const viewerRole = req.user.isUltimateAdmin ? 'ultimate_admin' : PRESIDIUM_POSITIONS.includes(req.user.positionTitle) ? 'presidium' : LEADER_POSITIONS.includes(req.user.positionTitle) ? 'department_lead' : 'volunteer';
       res.json({ success: true, month, months: Array.from(new Set([month, ...months, ...standardMonths])).sort(),
-        viewerId: String(req.user._id), access: { canManage: manager, canEditStandards: manager },
+        viewerId: String(req.user._id), access: { canManage: manager, canEditStandards: manager, viewerRole },
         members: members.map(member => ({ ...userBrief(member), canGrade: canGrade(req.user, member, scope), canSelf: String(member._id) === String(req.user._id) })),
         scores: visibleScores.map(serializeCultureScore), standard: standard.configuration, standardVersion: standard.version });
     } catch (error) { fail(res, error, '加载部门考核失败'); }

@@ -21,6 +21,7 @@ import { API_BASE, readStoredToken, persistSessionToken, clearSessionToken, subs
 import AttachmentViewer from './AttachmentViewer';
 import FeedbackPagination from './FeedbackPagination';
 import DepartmentPerformanceParticipation from './DepartmentPerformanceParticipation';
+import DepartmentMonthlyWorkspace from './DepartmentMonthlyWorkspace';
 import { responseSenderLabel } from './feedbackState';
 import { nextTranslatedValue } from './languageState';
 import { emptyFeedbackDraft, feedbackDraftStore } from './feedbackDraft';
@@ -1514,7 +1515,6 @@ const DEPARTMENT_SHOWCASE_URLS = {
   culture_sports_arts: '/culture-sports-arts/index.html'
 };
 const CULTURE_SPORTS_ARTS_INTRO_URL = DEPARTMENT_SHOWCASE_URLS.culture_sports_arts;
-const CULTURE_SPORTS_ARTS_PERFORMANCE_URL = '/culture-sports-arts/performance/index.html';
 
 const SIEHUB_HISTORY_MARKER = 'siehub-navigation-v1';
 const SIEHUB_APP_SURFACES = new Set(['hub', 'departments', 'ultimateOrganization', 'department', 'sievox', 'siebridge', 'my']);
@@ -4017,7 +4017,7 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
         </div>
         {performanceSection === 'overview'
           ? <DepartmentPerformanceParticipation module={module} token={token} user={user} compact period={performancePeriod} onPeriodChange={setPerformancePeriod} />
-          : <DepartmentMonthlyPerformanceWorkspace module={module} period={performancePeriod} onPeriodChange={setPerformancePeriod} />}
+          : <DepartmentMonthlyWorkspace module={module} token={token} period={performancePeriod} onPeriodChange={setPerformancePeriod} />}
       </>
     );
   }
@@ -4124,38 +4124,6 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
         </div>
       </section>
     </>
-  );
-};
-
-const DepartmentMonthlyPerformanceWorkspace = ({ module, period = '', onPeriodChange }) => {
-  const frameRef = useRef(null);
-  const performanceUrl = `${CULTURE_SPORTS_ARTS_PERFORMANCE_URL}?unified=1&organization=${encodeURIComponent(module.organization)}&department=${encodeURIComponent(module.key)}&departmentLabel=${encodeURIComponent(module.title)}`;
-  useEffect(() => {
-    const handlePeriod = event => {
-      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || event.data?.type !== 'culture-performance-period') return;
-      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.data.month)) onPeriodChange?.(event.data.month);
-    };
-    window.addEventListener('message', handlePeriod);
-    return () => window.removeEventListener('message', handlePeriod);
-  }, [onPeriodChange]);
-  return (
-  <section className="siehub-special-performance-card">
-    <div className="siehub-special-performance-head">
-      <div>
-        <p>DEPARTMENT / PERFORMANCE</p>
-        <h2>{module.title}考核绩效平台</h2>
-        <span>按月自评、逐项评分与维护本部门考核标准。</span>
-      </div>
-      <button type="button" onClick={() => window.open(performanceUrl, '_blank', 'noopener,noreferrer')}>新窗口打开</button>
-    </div>
-    <iframe
-      ref={frameRef}
-      className="siehub-special-performance-frame"
-      src={`${performanceUrl}${period ? `&month=${encodeURIComponent(period)}` : ''}`}
-      title={`${module.title}考核绩效平台`}
-      loading="lazy"
-    />
-  </section>
   );
 };
 
@@ -4334,7 +4302,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
             {!isCultureSportsArts && <button type="button" className={performanceSection === 'policy' ? 'is-active' : ''} onClick={() => setPerformanceSection('policy')}>部门基础模板</button>}
           </div>
           {performanceSection === 'overview' ? <DepartmentPerformanceParticipation module={module} token={token} user={user} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
-            : performanceSection === 'records' ? <DepartmentMonthlyPerformanceWorkspace module={module} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
+            : performanceSection === 'records' ? <DepartmentMonthlyWorkspace module={module} token={token} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
               : performanceSection === 'legacy' ? <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformanceRecords} readOnly />
                 : !isCultureSportsArts && <DepartmentPerformancePolicyCard
                   module={module}
