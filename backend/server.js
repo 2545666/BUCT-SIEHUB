@@ -4494,7 +4494,7 @@ app.post('/api/upload', authenticate, upload.array('files', 10), async (req, res
 });
 
 installSieBridgeRoutes({ app, authenticate, logAction, Notification });
-installCulturePerformanceRoutes({ app, authenticate, logAction, User, CohortMembership, getDepartmentPerformanceAccess, getDepartmentCapabilityAccess });
+installCulturePerformanceRoutes({ app, authenticate, logAction, User, CohortMembership, DepartmentPerformancePolicy, getDepartmentPerformanceAccess, getDepartmentCapabilityAccess });
 
 app.get('/api/uploads/avatars/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);

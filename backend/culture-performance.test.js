@@ -48,7 +48,7 @@ function harness(t) {
     find: filter => chain(users.filter(u => !filter._id || u._id === filter._id))
   };
   installCulturePerformanceRoutes({
-    app: { get: (route, ...handlers) => routes.set('GET ' + route, handlers.at(-1)), put: (route, ...handlers) => routes.set('PUT ' + route, handlers.at(-1)) },
+    app: { get: (route, ...handlers) => routes.set('GET ' + route, handlers.at(-1)), put: (route, ...handlers) => routes.set('PUT ' + route, handlers.at(-1)), delete: (route, ...handlers) => routes.set('DELETE ' + route, handlers.at(-1)) },
     authenticate() {}, logAction: async () => {}, User,
     getDepartmentPerformanceAccess: user => user.isUltimateAdmin || user._id === leader._id ? { canEdit: true } : null,
     getDepartmentCapabilityAccess: user => user.organization === assignment.organization && user.department === assignment.department ? {} : null
@@ -158,6 +158,8 @@ test('standards validate totals and grade details against their exact configurat
   assert.throws(() => calculateCultureGrade({ i_0_0: '伪造等级' }, standard), /不一致/);
   assert.throws(() => calculateCultureGrade({ i_99_99: '优秀' }, standard), /无效/);
   assert.throws(() => calculateCultureGrade({ bonus: 11 }, standard), /加分/);
+  const unlimited = normalizeCultureStandard({ ...standard, bonus: { ...standard.bonus, max: null } });
+  assert.equal(calculateCultureGrade({ bonus: 25 }, unlimited).leaderScore, 25);
   const score = serializeCultureScore({ _id: 'zero', target: first._id, month: '2026-10', leaderScore: 0, selfScore: 0, standardSnapshot: standard });
   assert.equal(score.combinedScore, 0);
   assert.equal(score.status, '已完成');
@@ -165,19 +167,33 @@ test('standards validate totals and grade details against their exact configurat
 
 const html = fs.readFileSync(path.join(__dirname, '../frontend/public/culture-sports-arts/performance/index.html'), 'utf8');
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]);
-function page() {
+function page(search = '') {
   const elements = new Map(), storage = new Map();
   const getElement = id => {
     if (!elements.has(id)) elements.set(id, { value: '', textContent: '', style: {}, className: '', disabled: false, options: [], addEventListener() {}, setAttribute() {}, querySelectorAll: () => [] });
     return elements.get(id);
   };
-  const sandbox = { console, Date, setTimeout, clearTimeout, document: { getElementById: getElement, addEventListener() {}, querySelectorAll: () => [], body: { className: '' } }, localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }, sessionStorage: { getItem: () => '' }, window: {}, fetch: async () => { throw new Error('unexpected request'); } };
+  const sandbox = { console, Date, URLSearchParams, location: { search }, setTimeout, clearTimeout, document: { getElementById: getElement, addEventListener() {}, querySelectorAll: () => [], body: { className: '' } }, localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }, sessionStorage: { getItem: () => '' }, window: {}, fetch: async () => { throw new Error('unexpected request'); } };
   vm.createContext(sandbox);
   vm.runInContext(scripts.find(source => source.includes('var state =')), sandbox);
   sandbox.state.std = copy(DEFAULT_CULTURE_STANDARD);
   sandbox.db = sandbox.siehubDatabaseAdapter();
   return sandbox;
 }
+
+test('shared page routes each department to its own monthly scores, evaluations and draft storage', async () => {
+  const culture = page();
+  const rights = page('?organization=student_union&department=student_rights&departmentLabel=学生权益部');
+  assert.equal(culture.CULTURE_PATH, '/hub/departments/student_union/culture_sports_arts/culture-performance');
+  assert.equal(rights.CULTURE_PATH, '/hub/departments/student_union/student_rights/monthly-performance');
+  assert.notEqual(rights.DRAFT_KEY, culture.DRAFT_KEY);
+  const requests = [];
+  rights.siehubRequest = async path => { requests.push(path); return {}; };
+  await rights.siehubLoadWorkbench();
+  await rights.siehubLoadEvaluations('2026-10');
+  assert.match(requests[0], /student_rights\/monthly-performance-workbench/);
+  assert.match(requests[1], /student_rights\/performance-evaluations/);
+});
 
 test('all page scripts parse and the page keeps duplicate names distinct by user ID', () => {
   scripts.forEach(source => new vm.Script(source));
@@ -203,7 +219,7 @@ test('page first-save sends one non-destructive monthly PUT including zero and c
   assert.equal(requests[0].options.method, 'PUT');
   assert.equal(requests[0].route.endsWith('culture-performance-scores'), true);
   assert.deepEqual(JSON.parse(requests[0].options.body), { month: '2026-10', mode: 'self', selfScore: 0, workLogs: [{ t: '活动', w: '完整证据' }], comment: '零分自评', targetId: second._id });
-  assert.equal(html.includes("method:'DELETE'"), false);
+  assert.equal(html.includes("CULTURE_PATH + '-scores', { method: 'DELETE'"), false);
   assert.equal(html.includes('performance-roster'), false);
 });
 

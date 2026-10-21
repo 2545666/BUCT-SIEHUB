@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { getVolunteerPerformancePolicy, isValidManagedDepartment } = require('./organization');
 
 const ASSIGNMENT = Object.freeze({ organization: 'student_union', department: 'culture_sports_arts' });
 const ROUTE = '/api/hub/departments/student_union/culture_sports_arts/culture-performance';
@@ -65,6 +66,21 @@ monthlyScoreSchema.index({ target: 1, month: 1 }, { unique: true });
 monthlyScoreSchema.index({ organization: 1, department: 1, month: 1 });
 const CultureMonthlyStandard = mongoose.models.CultureMonthlyStandard || mongoose.model('CultureMonthlyStandard', monthlyStandardSchema);
 const CultureMonthlyScore = mongoose.models.CultureMonthlyScore || mongoose.model('CultureMonthlyScore', monthlyScoreSchema);
+const departmentMonthlyStandardSchema = new mongoose.Schema({
+  ...monthlyStandardSchema.obj,
+  month: { type: String, required: true },
+  organization: { type: String, required: true },
+  department: { type: String, required: true }
+}, { timestamps: true });
+departmentMonthlyStandardSchema.index({ organization: 1, department: 1, month: 1 }, { unique: true });
+const departmentMonthlyScoreSchema = new mongoose.Schema({
+  ...monthlyScoreSchema.obj,
+  organization: { type: String, required: true },
+  department: { type: String, required: true }
+}, { timestamps: true });
+departmentMonthlyScoreSchema.index({ organization: 1, department: 1, target: 1, month: 1 }, { unique: true });
+const DepartmentMonthlyStandard = mongoose.models.DepartmentMonthlyStandard || mongoose.model('DepartmentMonthlyStandard', departmentMonthlyStandardSchema);
+const DepartmentMonthlyScore = mongoose.models.DepartmentMonthlyScore || mongoose.model('DepartmentMonthlyScore', departmentMonthlyScoreSchema);
 
 const round = value => Math.round(value * 10) / 10;
 const text = (value, max) => String(value ?? '').trim().slice(0, max);
@@ -77,10 +93,27 @@ const numberInRange = (value, min, max, label) => {
   if (!Number.isFinite(number) || number < min || number > max) throw badInput(`${label}应在 ${min} 到 ${max} 之间`);
   return number;
 };
-const isCultureMember = user => user && user.isActive !== false &&
-  user.organization === ASSIGNMENT.organization && user.department === ASSIGNMENT.department &&
+const isDepartmentMember = (user, assignment) => user && user.isActive !== false &&
+  user.organization === assignment.organization && user.department === assignment.department &&
   ((user.role === 'admin' && user.memberRole === 'volunteer' && user.positionTitle === 'volunteer') ||
     (user.role === 'superadmin' && user.memberRole === 'department_lead' && LEADER_POSITIONS.includes(user.positionTitle)));
+const standardFromPolicy = policy => {
+  const regular = (policy.dimensions || []).filter(item => item.scoringMode !== 'bonus' && item.key !== 'bonus');
+  const total = regular.reduce((sum, item) => sum + Number(item.maxScore || 0), 0);
+  if (!regular.length || total <= 0) return DEFAULT_CULTURE_STANDARD;
+  let allocated = 0;
+  const dims = regular.map((item, index) => {
+    const max = index === regular.length - 1 ? Math.round((100 - allocated) * 10) / 10 : Math.round(Number(item.maxScore || 0) / total * 1000) / 10;
+    allocated += max;
+    return { name: item.label, max, items: [{ name: item.label, max, desc: item.rule || '' }] };
+  });
+  const bonus = (policy.dimensions || []).find(item => item.scoringMode === 'bonus' || item.key === 'bonus');
+  const selfWeight = Number(policy.evaluationWeights?.self);
+  const leaderWeight = Number(policy.evaluationWeights?.leader);
+  const weight = Number.isFinite(selfWeight) && Number.isFinite(leaderWeight) && Math.abs(selfWeight + leaderWeight - 100) < 0.001
+    ? { self: selfWeight, leader: leaderWeight } : DEFAULT_CULTURE_STANDARD.weight;
+  return { ...DEFAULT_CULTURE_STANDARD, dims, weight, bonus: { ...DEFAULT_CULTURE_STANDARD.bonus, name: bonus?.label || '加分项', max: policy.bonusMode === 'extra' && bonus?.maxScore == null ? null : bonus?.maxScore ?? DEFAULT_CULTURE_STANDARD.bonus.max, desc: bonus?.rule || '' } };
+};
 const userBrief = user => ({
   id: String(user._id || user.id), name: user.name || '', studentId: user.studentId || '',
   positionTitle: user.positionTitle || 'volunteer', isActive: user.isActive !== false
@@ -106,8 +139,8 @@ const normalizeCultureStandard = input => {
   if (Math.abs(weight.leader + weight.self - 100) > 0.001) throw badInput('两项权重之和应为 100%');
   const selfDueHour = numberInRange(input.selfDueHour ?? 20, 0, 23, '自评截止小时');
   if (!Number.isInteger(selfDueHour)) throw badInput('自评截止小时应为整数');
-  const adjustment = (item, label) => ({ name: text(item?.name || label, 100), max: numberInRange(item?.max ?? 10, 0, 100, label), desc: text(item?.desc, 1000) });
-  return { levels, dims, weight, selfDueHour, bonus: adjustment(input.bonus, '加分项'), minus: adjustment(input.minus, '扣分项') };
+  const adjustment = (item, label, allowUnlimited = false) => ({ name: text(item?.name || label, 100), max: allowUnlimited && item?.max === null ? null : numberInRange(item?.max ?? 10, 0, 100, label), desc: text(item?.desc, 1000) });
+  return { levels, dims, weight, selfDueHour, bonus: adjustment(input.bonus, '加分项', true), minus: adjustment(input.minus, '扣分项') };
 };
 const calculateCultureGrade = (details, standard) => {
   if (!details || typeof details !== 'object' || Array.isArray(details)) throw badInput('逐项评分无效');
@@ -129,10 +162,10 @@ const calculateCultureGrade = (details, standard) => {
     total += sum;
   });
   if (Object.keys(details).some(key => !allowedKeys.has(key))) throw badInput('评分中包含无效考核项');
-  const bonus = numberInRange(details.bonus ?? 0, 0, standard.bonus.max, '加分项');
+  const bonus = numberInRange(details.bonus ?? 0, 0, standard.bonus.max == null ? Infinity : standard.bonus.max, '加分项');
   const minus = numberInRange(details.minus ?? 0, 0, standard.minus.max, '扣分项');
   clean.bonus = bonus; clean.minus = minus;
-  return { itemDetails: clean, dimensionScores: dimensions, bonus, minus, leaderScore: round(Math.max(0, Math.min(100 + standard.bonus.max, total + bonus - minus))) };
+  return { itemDetails: clean, dimensionScores: dimensions, bonus, minus, leaderScore: round(Math.max(0, standard.bonus.max == null ? total + bonus - minus : Math.min(100 + standard.bonus.max, total + bonus - minus))) };
 };
 const normalizeWorkLogs = (input, month) => {
   if (!Array.isArray(input) || input.length > 100) throw badInput('工作纪实格式无效');
@@ -165,54 +198,89 @@ const serializeCultureScore = document => {
   };
 };
 
-const installCulturePerformanceRoutes = ({ app, authenticate, logAction, User, CohortMembership, getDepartmentPerformanceAccess, getDepartmentCapabilityAccess }) => {
-  const canManage = user => Boolean(getDepartmentPerformanceAccess(user, ASSIGNMENT));
-  const canEnter = user => canManage(user) || (isCultureMember(user) && Boolean(getDepartmentCapabilityAccess(user, ASSIGNMENT, 'participate')));
-  const canGrade = (actor, target) => canManage(actor) &&
+const installCulturePerformanceRoutes = ({ app, authenticate, logAction, User, CohortMembership, DepartmentPerformancePolicy, getDepartmentPerformanceAccess, getDepartmentCapabilityAccess }) => {
+  const cultureScope = { assignment: ASSIGNMENT, Score: CultureMonthlyScore, Standard: CultureMonthlyStandard, legacy: true };
+  const scopeFor = req => {
+    if (!req.params?.organization) return cultureScope;
+    const assignment = { organization: req.params.organization, department: req.params.department };
+    return isValidManagedDepartment(assignment)
+      ? assignment.organization === ASSIGNMENT.organization && assignment.department === ASSIGNMENT.department
+        ? cultureScope : { assignment, Score: DepartmentMonthlyScore, Standard: DepartmentMonthlyStandard, legacy: false }
+      : null;
+  };
+  const standardFilter = (scope, month) => scope.legacy ? { month } : { ...scope.assignment, month };
+  const canManage = (user, scope) => Boolean(getDepartmentPerformanceAccess(user, scope.assignment));
+  const canEnter = (user, scope) => canManage(user, scope) ||
+    (isDepartmentMember(user, scope.assignment) && Boolean(getDepartmentCapabilityAccess(user, scope.assignment, 'participate')));
+  const canGrade = (actor, target, scope) => canManage(actor, scope) &&
     (!LEADER_POSITIONS.includes(target.positionTitle) || actor.isUltimateAdmin || PRESIDIUM_POSITIONS.includes(actor.positionTitle));
-  const loadStandard = async month => {
-    const doc = await CultureMonthlyStandard.findOne({ month }).lean();
-    return { configuration: doc?.configuration || DEFAULT_CULTURE_STANDARD, version: doc?.version || 0 };
+  const loadStandard = async (scope, month) => {
+    const doc = await scope.Standard.findOne(standardFilter(scope, month)).lean();
+    if (doc) return { configuration: doc.configuration, version: doc.version || 0 };
+    if (scope.legacy) return { configuration: DEFAULT_CULTURE_STANDARD, version: 0 };
+    const custom = DepartmentPerformancePolicy ? await DepartmentPerformancePolicy.findOne(scope.assignment).lean() : null;
+    const policy = custom?.dimensions?.length ? custom : getVolunteerPerformancePolicy(scope.assignment.organization, scope.assignment.department);
+    return { configuration: standardFromPolicy(policy), version: 0 };
   };
   const fail = (res, error, message) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : message });
-  app.get(`${ROUTE}-workbench`, authenticate, async (req, res) => {
-    if (!canEnter(req.user)) return res.status(403).json({ success: false, message: '无权访问文体艺术部考核' });
+  const workbench = async (req, res) => {
+    const scope = scopeFor(req);
+    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
+    if (!canEnter(req.user, scope)) return res.status(403).json({ success: false, message: '无权访问该部门考核' });
     const month = req.query.month || currentChinaMonth();
     if (!isValidMonth(month)) return res.status(400).json({ success: false, message: '月份格式应为 YYYY-MM' });
     try {
-      const manager = canManage(req.user);
-      const scoreScope = { ...ASSIGNMENT, ...(manager ? {} : { target: req.user._id }) };
+      const manager = canManage(req.user, scope);
+      const scoreScope = { ...scope.assignment, ...(manager ? {} : { target: req.user._id }) };
       const [members, scores, standard, months, standardMonths] = await Promise.all([
-        User.find({ ...ASSIGNMENT, isActive: true, $or: [{ role: 'admin', memberRole: 'volunteer', positionTitle: 'volunteer' }, { role: 'superadmin', memberRole: 'department_lead', positionTitle: { $in: LEADER_POSITIONS } }], ...(manager ? {} : { _id: req.user._id }) }).select('name studentId role positionTitle memberRole organization department isActive').sort({ studentId: 1 }).lean(),
-        CultureMonthlyScore.find({ ...scoreScope, month }).populate('target', 'name studentId positionTitle isActive').sort({ createdAt: 1 }).lean(),
-        loadStandard(month), CultureMonthlyScore.distinct('month', scoreScope), CultureMonthlyStandard.distinct('month')
+        User.find({ ...scope.assignment, isActive: true, $or: [{ role: 'admin', memberRole: 'volunteer', positionTitle: 'volunteer' }, { role: 'superadmin', memberRole: 'department_lead', positionTitle: { $in: LEADER_POSITIONS } }], ...(manager ? {} : { _id: req.user._id }) }).select('name studentId role positionTitle memberRole organization department isActive').sort({ studentId: 1 }).lean(),
+        scope.Score.find({ ...scoreScope, month }).populate('target', 'name studentId positionTitle isActive').sort({ createdAt: 1 }).lean(),
+        loadStandard(scope, month), scope.Score.distinct('month', scoreScope), scope.Standard.distinct('month', scope.legacy ? {} : scope.assignment)
       ]);
       res.json({ success: true, month, months: Array.from(new Set([month, ...months, ...standardMonths])).sort(),
         viewerId: String(req.user._id), access: { canManage: manager, canEditStandards: manager },
-        members: members.map(member => ({ ...userBrief(member), canGrade: canGrade(req.user, member), canSelf: String(member._id) === String(req.user._id) })),
+        members: members.map(member => ({ ...userBrief(member), canGrade: canGrade(req.user, member, scope), canSelf: String(member._id) === String(req.user._id) })),
         scores: scores.map(serializeCultureScore), standard: standard.configuration, standardVersion: standard.version });
-    } catch (error) { fail(res, error, '加载文体考核失败'); }
-  });
-  app.put(`${ROUTE}-standards`, authenticate, async (req, res) => {
-    if (!canManage(req.user)) return res.status(403).json({ success: false, message: '无权修改文体考核标准' });
+    } catch (error) { fail(res, error, '加载部门考核失败'); }
+  };
+  const saveStandard = async (req, res) => {
+    const scope = scopeFor(req);
+    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
+    if (!canManage(req.user, scope)) return res.status(403).json({ success: false, message: '无权修改该部门考核标准' });
     try {
       const month = req.body.month;
       if (!isValidMonth(month)) throw badInput('月份格式应为 YYYY-MM');
       const configuration = normalizeCultureStandard(req.body.standard);
-      const doc = await CultureMonthlyStandard.findOneAndUpdate({ month }, { $set: { configuration, updatedBy: req.user._id }, $inc: { version: 1 } }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: false });
-      await logAction(req.user._id, 'update_culture_monthly_standard', 'cultureMonthlyStandard', doc._id, { ...ASSIGNMENT, month, version: doc.version }, req);
+      const filter = standardFilter(scope, month);
+      const doc = await scope.Standard.findOneAndUpdate(filter, { $set: { ...filter, configuration, updatedBy: req.user._id }, $inc: { version: 1 } }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: false });
+      await logAction(req.user._id, 'update_department_monthly_standard', 'departmentMonthlyStandard', doc._id, { ...scope.assignment, month, version: doc.version }, req);
       res.json({ success: true, standard: doc.configuration, version: doc.version });
     } catch (error) { fail(res, error, '保存考核标准失败'); }
-  });
-  app.put(`${ROUTE}-scores`, authenticate, async (req, res) => {
-    if (!canEnter(req.user)) return res.status(403).json({ success: false, message: '无权提交文体考核' });
+  };
+  const resetStandard = async (req, res) => {
+    const scope = scopeFor(req);
+    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
+    if (!canManage(req.user, scope)) return res.status(403).json({ success: false, message: '无权修改该部门考核标准' });
+    const month = req.body.month;
+    if (!isValidMonth(month)) return res.status(400).json({ success: false, message: '月份格式应为 YYYY-MM' });
+    try {
+      await scope.Standard.deleteOne(standardFilter(scope, month));
+      const standard = await loadStandard(scope, month);
+      await logAction(req.user._id, 'reset_department_monthly_standard', 'departmentMonthlyStandard', null, { ...scope.assignment, month }, req);
+      res.json({ success: true, standard: standard.configuration, version: standard.version });
+    } catch (error) { fail(res, error, '恢复考核标准失败'); }
+  };
+  const saveScore = async (req, res) => {
+    const scope = scopeFor(req);
+    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
+    if (!canEnter(req.user, scope)) return res.status(403).json({ success: false, message: '无权提交该部门考核' });
     try {
       const { month, targetId, mode } = req.body;
       if (!isValidMonth(month) || !mongoose.isValidObjectId(targetId) || !['self', 'grade'].includes(mode)) throw badInput('月份、成员或评分类型无效');
       const target = await User.findById(targetId).select('name studentId role positionTitle memberRole organization department isActive').lean();
-      if (!isCultureMember(target)) return res.status(403).json({ success: false, message: '只能考核文体艺术部在岗成员' });
-      if (mode === 'self' ? String(req.user._id) !== String(target._id) : !canGrade(req.user, target)) return res.status(403).json({ success: false, message: mode === 'self' ? '只能提交本人的自评' : '无权为该成员评分' });
-      const standard = await loadStandard(month);
+      if (!isDepartmentMember(target, scope.assignment)) return res.status(403).json({ success: false, message: '只能考核该部门在岗成员' });
+      if (mode === 'self' ? String(req.user._id) !== String(target._id) : !canGrade(req.user, target, scope)) return res.status(403).json({ success: false, message: mode === 'self' ? '只能提交本人的自评' : '无权为该成员评分' });
+      const standard = await loadStandard(scope, month);
       if (mode === 'grade' && Number(req.body.standardVersion) !== standard.version) return res.status(409).json({ success: false, message: '本月考核标准已更新，请刷新后重新评分' });
       const now = new Date();
       let fields;
@@ -225,24 +293,30 @@ const installCulturePerformanceRoutes = ({ app, authenticate, logAction, User, C
       }
       let cohortId = null;
       if (CohortMembership) {
-        const membership = await CohortMembership.findOne({ ...ASSIGNMENT, user: target._id, archivedAt: null }).populate('cohort').sort({ createdAt: -1 }).lean();
+        const membership = await CohortMembership.findOne({ ...scope.assignment, user: target._id, archivedAt: null }).populate('cohort').sort({ createdAt: -1 }).lean();
         if (membership?.cohort?.status === 'active') cohortId = membership.cohort._id;
       }
-      const insertFields = { target: target._id, month, ...ASSIGNMENT, cohort: cohortId,
+      const insertFields = { target: target._id, month, ...scope.assignment, cohort: cohortId,
         targetSnapshot: { name: target.name, studentId: target.studentId, positionTitle: target.positionTitle } };
       if (mode === 'self') { insertFields.standardSnapshot = standard.configuration; insertFields.standardVersion = standard.version; }
-      const filter = { target: target._id, month, ...ASSIGNMENT };
+      const filter = { target: target._id, month, ...scope.assignment };
       const update = { $set: fields, $setOnInsert: insertFields };
       let score;
       try {
-        score = await CultureMonthlyScore.findOneAndUpdate(filter, update, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
+        score = await scope.Score.findOneAndUpdate(filter, update, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
       } catch (error) {
         if (error.code !== 11000) throw error;
-        score = await CultureMonthlyScore.findOneAndUpdate(filter, { $set: fields }, { new: true, runValidators: true });
+        score = await scope.Score.findOneAndUpdate(filter, { $set: fields }, { new: true, runValidators: true });
       }
-      await logAction(req.user._id, mode === 'self' ? 'submit_culture_self_score' : 'submit_culture_grade', 'cultureMonthlyScore', score._id, { ...ASSIGNMENT, month, targetId }, req);
+      await logAction(req.user._id, mode === 'self' ? 'submit_department_self_score' : 'submit_department_grade', 'departmentMonthlyScore', score._id, { ...scope.assignment, month, targetId }, req);
       res.json({ success: true, score: serializeCultureScore(score) });
     } catch (error) { fail(res, error, '保存月度考核失败'); }
-  });
+  };
+  for (const route of [ROUTE, '/api/hub/departments/:organization/:department/monthly-performance']) {
+    app.get(`${route}-workbench`, authenticate, workbench);
+    app.put(`${route}-standards`, authenticate, saveStandard);
+    app.put(`${route}-scores`, authenticate, saveScore);
+  }
+  app.delete('/api/hub/departments/:organization/:department/monthly-performance-standards', authenticate, resetStandard);
 };
-module.exports = { DEFAULT_CULTURE_STANDARD, CultureMonthlyScore, CultureMonthlyStandard, calculateCultureGrade, normalizeCultureStandard, serializeCultureScore, isValidMonth, installCulturePerformanceRoutes };
+module.exports = { DEFAULT_CULTURE_STANDARD, CultureMonthlyScore, CultureMonthlyStandard, DepartmentMonthlyScore, DepartmentMonthlyStandard, standardFromPolicy, calculateCultureGrade, normalizeCultureStandard, serializeCultureScore, isValidMonth, installCulturePerformanceRoutes };

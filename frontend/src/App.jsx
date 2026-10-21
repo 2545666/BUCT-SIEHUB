@@ -692,6 +692,13 @@ Object.assign(EN_TRANSLATIONS, {
   '仅查看本人当前学期的积分、维度分布和绩效流水。': 'View only your own points, dimension breakdown, and performance records for the current semester.',
   '学期管理、成员名单、批量赋分、绩效流水撤回与期末动态加权统一在这里完成。': 'Manage semesters, rosters, batch scoring, record recalls, and end-of-term dynamic weighting here.',
   '志愿者绩效制度': 'Volunteer performance policy',
+  '我的绩效与评价': 'My performance and reviews',
+  '我的成绩与评价': 'My scores and reviews',
+  '成绩与评价': 'Scores and reviews',
+  '月度逐项评分': 'Monthly item scores',
+  '月度逐项评分与标准': 'Monthly item scores and standards',
+  '历史日常积分': 'Historical daily points',
+  '部门基础模板': 'Department base template',
   '部门绩效工作台': 'Department performance workspace',
   '当前先完整复刻 SIEVOX 的六维考核体系，后续再按部门单独微调。': 'The six-dimension SIEVOX assessment model is replicated first and can be customized by department later.',
   '同款模板': 'Matching template',
@@ -1687,7 +1694,7 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
     <div className="siehub-policy-head">
       <div>
         <p>{module?.title || '部门工作台'} / VOLUNTEER PERFORMANCE</p>
-        <h3>志愿者绩效制度</h3>
+        <h3>部门基础模板</h3>
         <span>{activePolicy.description || '当前先完整复刻 SIEVOX 的六维考核体系，后续再按部门单独微调。'}</span>
       </div>
       <div className="siehub-policy-actions">
@@ -1710,7 +1717,7 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
       <ShieldCheck />
       <div>
         <strong>{activePolicy.sourceProduct || 'SIEVOX'} 同款模板</strong>
-        <span>{module?.title || '该部门'}当前采用「{activePolicy.title || 'SIEVOX 志愿者绩效考核制度'}」{activePolicy.updatedBy?.name ? `，最近由 ${activePolicy.updatedBy.name} 更新` : ''}。</span>
+        <span>{module?.title || '该部门'}当前采用「{activePolicy.title || 'SIEVOX 志愿者绩效考核制度'}」{activePolicy.updatedBy?.name ? `，最近由 ${activePolicy.updatedBy.name} 更新` : ''}。未保存标准的月份会由此模板生成初始维度；当月考核项、分值与评分说明请在“月度逐项评分与标准”中修改。</span>
       </div>
       {canEdit && <button type="button" onClick={onReset} disabled={saving || loading}>恢复 SIEVOX 默认</button>}
     </div>
@@ -1796,7 +1803,10 @@ const calculateDepartmentScoreRows = (records = [], roster = [], policy = DEFAUL
   return Array.from(rows.values()).sort((a, b) => b.total - a.total);
 };
 
-const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '', onPeriodChange }) => {
+const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = false, period = '', onPeriodChange }) => {
+  const [localPeriod, setLocalPeriod] = useState('');
+  const selectedPeriod = period || localPeriod;
+  const changePeriod = onPeriodChange || setLocalPeriod;
   const [workbench, setWorkbench] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1816,14 +1826,14 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '',
     if (!module?.organization || !module?.key || !token || !canManage) return;
     setLoading(true);
     try {
-      const query = period ? `?semester=${encodeURIComponent(period)}` : '';
+      const query = selectedPeriod ? `?semester=${encodeURIComponent(selectedPeriod)}` : '';
       const res = await fetch(`${API_BASE}/hub/departments/${module.organization}/${module.key}/performance-workbench${query}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || '获取部门绩效工作台失败');
       setWorkbench(data);
-      if (!period) onPeriodChange?.(data.semester);
+      if (!selectedPeriod) changePeriod(data.semester);
       const rosterIds = (data.roster || []).map(user => user.id || user._id);
       setRosterSelection(rosterIds);
       setRecordSelection(current => current.filter(id => rosterIds.includes(id)));
@@ -1837,7 +1847,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '',
     } finally {
       setLoading(false);
     }
-  }, [module?.organization, module?.key, token, canManage, period, onPeriodChange]);
+  }, [module?.organization, module?.key, token, canManage, selectedPeriod, changePeriod]);
 
   useEffect(() => {
     refreshWorkbench();
@@ -1929,12 +1939,12 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '',
       <div className="siehub-performance-head">
         <div>
           <p>DEPARTMENT PERFORMANCE</p>
-          <h3>部门绩效工作台</h3>
-          <span>{workbench?.semester || '当前学期'} · 添加成员、批量录入、查看流水与排行。</span>
+          <h3>{readOnly ? '历史日常积分' : '部门绩效工作台'}</h3>
+          <span>{workbench?.semester || '当前学期'} · {readOnly ? '查看旧制积分流水与排行。' : '添加成员、批量录入、查看流水与排行。'}</span>
         </div>
         <div className="unified-performance-period">
           <label htmlFor={`manage-performance-period-${module.key}`}>考核学期</label>
-          <select id={`manage-performance-period-${module.key}`} value={period || workbench?.semester || ''} onChange={event => onPeriodChange?.(event.target.value)} disabled={loading || saving}>
+          <select id={`manage-performance-period-${module.key}`} value={selectedPeriod || workbench?.semester || ''} onChange={event => changePeriod(event.target.value)} disabled={loading || saving}>
             {(workbench?.semesters || []).map(item => <option key={item} value={item}>{item}</option>)}
           </select>
           <button type="button" onClick={refreshWorkbench} disabled={loading || saving}>{loading ? '同步中' : '刷新'}</button>
@@ -1946,7 +1956,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '',
         <span><strong>{roster.length}</strong><em>本学期成员</em></span>
         <span><strong>{records.length}</strong><em>绩效流水</em></span>
       </div>
-      <div className="siehub-performance-grid">
+      {!readOnly && <div className="siehub-performance-grid">
         <section className="siehub-performance-panel">
           <div className="siehub-performance-panel-head"><span>01</span><div><h4>添加本学期成员</h4><p>从该部门志愿者账号中选择参与绩效核算的成员。</p></div></div>
           <div className="siehub-member-checks">
@@ -1987,7 +1997,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '',
           <label className="siehub-performance-reason"><span>加分事由</span><textarea value={form.reason} onChange={event => setForm({ ...form, reason: event.target.value })} rows={3} required /></label>
           <button className="siehub-wide-action" type="submit" disabled={saving || loading}>{saving ? '处理中' : '录入绩效'}</button>
         </form>
-      </div>
+      </div>}
 
       <div className="siehub-performance-grid lower">
         <section className="siehub-performance-panel">
@@ -2011,7 +2021,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, period = '',
                 <article key={record.id || record._id}>
                   <div><strong>{record.volunteer?.name || '成员'}</strong><small>{dim?.label || record.dimension} · {record.activityName || '常规记录'}</small><p>{record.reason}</p></div>
                   <span>+{record.score}</span>
-                  <button type="button" onClick={() => deleteRecord(record.id || record._id)}>撤回</button>
+                  {!readOnly && <button type="button" onClick={() => deleteRecord(record.id || record._id)}>撤回</button>}
                 </article>
               );
             })}
@@ -3989,7 +3999,6 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
   const [performancePeriod, setPerformancePeriod] = useState('');
   const isSIEVOX = module?.key === 'student_rights';
   const isSIEBridge = module?.key === 'academic_technology';
-  const isCultureSportsArts = module?.key === 'culture_sports_arts';
   const canViewFiles = canViewDepartmentFiles(user, module);
   const performanceAccess = getModuleAccess(user, module);
   const canEnterPerformance = Boolean(user?.isUltimateAdmin || ['member', 'manage', 'ultimate'].includes(performanceAccess?.accessLevel));
@@ -4002,13 +4011,13 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
           <ChevronLeft />
           返回学生服务入口
         </button>
-        {isCultureSportsArts && <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
+        <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
           <button type="button" className={performanceSection === 'overview' ? 'is-active' : ''} onClick={() => setPerformanceSection('overview')}>我的成绩与评价</button>
           <button type="button" className={performanceSection === 'rubric' ? 'is-active' : ''} onClick={() => setPerformanceSection('rubric')}>月度逐项评分</button>
-        </div>}
-        {performanceSection === 'overview' || !isCultureSportsArts
+        </div>
+        {performanceSection === 'overview'
           ? <DepartmentPerformanceParticipation module={module} token={token} user={user} compact period={performancePeriod} onPeriodChange={setPerformancePeriod} />
-          : <CultureSportsArtsPerformanceWorkspace period={performancePeriod} onPeriodChange={setPerformancePeriod} />}
+          : <DepartmentMonthlyPerformanceWorkspace module={module} period={performancePeriod} onPeriodChange={setPerformancePeriod} />}
       </>
     );
   }
@@ -4076,20 +4085,12 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
               <p>按专业与年级查找课程资料，上传真题、课件和笔记并查看审核进度。</p>
               <b>立即进入 <ArrowUpRight /></b>
             </button>
-          ) : isCultureSportsArts && canEnterPerformance ? (
-            <button className="siehub-student-service-entry" type="button" onClick={() => setPerformanceOpen(true)}>
-              <span>02</span>
-              <Trophy />
-              <strong>多源绩效评价</strong>
-              <p>进入文体艺术部绩效平台，完成自评、互评和负责人评议。</p>
-              <b>立即进入 <ArrowUpRight /></b>
-            </button>
           ) : canEnterPerformance ? (
             <button className="siehub-student-service-entry" type="button" onClick={() => setPerformanceOpen(true)}>
               <span>02</span>
               <Trophy />
               <strong>我的绩效与评价</strong>
-              <p>查看本人学期积分，完成自评、互评和职责范围内的评价。</p>
+              <p>查看月度逐项成绩，完成自评、互评和职责范围内的评价。</p>
               <b>进入考核 <ArrowUpRight /></b>
             </button>
           ) : (
@@ -4100,7 +4101,7 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
               <span>05</span>
               <Trophy />
               <strong>我的绩效与评价</strong>
-              <p>查看本人学期积分，完成自评、互评和职责范围内的评价。</p>
+              <p>查看月度逐项成绩，完成自评、互评和职责范围内的评价。</p>
               <b>进入考核 <ArrowUpRight /></b>
             </button>
           )}
@@ -4126,8 +4127,9 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
   );
 };
 
-const CultureSportsArtsPerformanceWorkspace = ({ period = '', onPeriodChange }) => {
+const DepartmentMonthlyPerformanceWorkspace = ({ module, period = '', onPeriodChange }) => {
   const frameRef = useRef(null);
+  const performanceUrl = `${CULTURE_SPORTS_ARTS_PERFORMANCE_URL}?unified=1&organization=${encodeURIComponent(module.organization)}&department=${encodeURIComponent(module.key)}&departmentLabel=${encodeURIComponent(module.title)}`;
   useEffect(() => {
     const handlePeriod = event => {
       if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || event.data?.type !== 'culture-performance-period') return;
@@ -4140,17 +4142,17 @@ const CultureSportsArtsPerformanceWorkspace = ({ period = '', onPeriodChange }) 
   <section className="siehub-special-performance-card">
     <div className="siehub-special-performance-head">
       <div>
-        <p>CULTURE, SPORTS &amp; ARTS / PERFORMANCE</p>
-        <h2>文体艺术部考核绩效平台</h2>
-        <span>已替换原通用绩效模块，平台数据与操作在独立子路径中运行。</span>
+        <p>DEPARTMENT / PERFORMANCE</p>
+        <h2>{module.title}考核绩效平台</h2>
+        <span>按月自评、逐项评分与维护本部门考核标准。</span>
       </div>
-      <button type="button" onClick={() => window.open(CULTURE_SPORTS_ARTS_PERFORMANCE_URL, '_blank', 'noopener,noreferrer')}>新窗口打开</button>
+      <button type="button" onClick={() => window.open(performanceUrl, '_blank', 'noopener,noreferrer')}>新窗口打开</button>
     </div>
     <iframe
       ref={frameRef}
       className="siehub-special-performance-frame"
-      src={`${CULTURE_SPORTS_ARTS_PERFORMANCE_URL}?unified=1${period ? `&month=${encodeURIComponent(period)}` : ''}`}
-      title="文体艺术部考核绩效平台"
+      src={`${performanceUrl}${period ? `&month=${encodeURIComponent(period)}` : ''}`}
+      title={`${module.title}考核绩效平台`}
       loading="lazy"
     />
   </section>
@@ -4327,21 +4329,23 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
         <>
           <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
             <button type="button" className={performanceSection === 'overview' ? 'is-active' : ''} onClick={() => setPerformanceSection('overview')}>成绩与评价</button>
-            <button type="button" className={performanceSection === 'records' ? 'is-active' : ''} onClick={() => setPerformanceSection('records')}>{isCultureSportsArts ? '月度逐项评分' : '日常积分'}</button>
-            {!isCultureSportsArts && <button type="button" className={performanceSection === 'policy' ? 'is-active' : ''} onClick={() => setPerformanceSection('policy')}>考核制度</button>}
+            <button type="button" className={performanceSection === 'records' ? 'is-active' : ''} onClick={() => setPerformanceSection('records')}>月度逐项评分与标准</button>
+            {!isCultureSportsArts && <button type="button" className={performanceSection === 'legacy' ? 'is-active' : ''} onClick={() => setPerformanceSection('legacy')}>历史日常积分</button>}
+            {!isCultureSportsArts && <button type="button" className={performanceSection === 'policy' ? 'is-active' : ''} onClick={() => setPerformanceSection('policy')}>部门基础模板</button>}
           </div>
           {performanceSection === 'overview' ? <DepartmentPerformanceParticipation module={module} token={token} user={user} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
-            : performanceSection === 'records' ? (isCultureSportsArts ? <CultureSportsArtsPerformanceWorkspace period={performancePeriod} onPeriodChange={setPerformancePeriod} /> : <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformanceRecords} period={performancePeriod} onPeriodChange={setPerformancePeriod} />)
-              : !isCultureSportsArts && <DepartmentPerformancePolicyCard
-              module={module}
-              policy={performancePolicy}
-              canEdit={canManagePerformance}
-              loading={policyLoading}
-              saving={policySaving}
-              message={policyMessage}
-              onSave={savePerformancePolicy}
-              onReset={resetPerformancePolicy}
-            />}
+            : performanceSection === 'records' ? <DepartmentMonthlyPerformanceWorkspace module={module} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
+              : performanceSection === 'legacy' ? <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformanceRecords} readOnly />
+                : !isCultureSportsArts && <DepartmentPerformancePolicyCard
+                  module={module}
+                  policy={performancePolicy}
+                  canEdit={canManagePerformance}
+                  loading={policyLoading}
+                  saving={policySaving}
+                  message={policyMessage}
+                  onSave={savePerformancePolicy}
+                  onReset={resetPerformancePolicy}
+                />}
         </>
       ) : (
         <>

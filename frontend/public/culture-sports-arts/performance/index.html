@@ -657,7 +657,7 @@ tbody tr:first-child td{background:linear-gradient(90deg,rgba(184,134,59,.09),rg
     <div class="ts"><span class="period" id="periodTx">2026-09</span>
       <button class="top-btn" id="btnHist">历史记录</button>
       <button class="top-btn admin-only" id="btnNewM">新建月份</button>
-      <span>2026-2027 学年第一学期 · 文体艺术部</span></div>
+      <span id="departmentTermLabel">文体艺术部 · 月度考核</span></div>
   </div>
   <div class="sp"></div>
   <div class="sync"><i class="dot" id="dot"></i><span id="syncTx">已同步</span></div>
@@ -849,6 +849,10 @@ tbody tr:first-child td{background:linear-gradient(90deg,rgba(184,134,59,.09),rg
         </div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">加分与扣分细则</div></div>
+      <div class="card-b" id="adjustmentList"></div>
+    </div>
   </div>
 
   <!-- 汇总 -->
@@ -918,7 +922,7 @@ tbody tr:first-child td{background:linear-gradient(90deg,rgba(184,134,59,.09),rg
   </div>
 
   <div style="padding:18px 0 8px;text-align:center" class="muted">
-    文体艺术部考核绩效平台 · 支持按月考核，数据云端同步
+    <span id="departmentFooterLabel">文体艺术部考核绩效平台</span> · 支持按月考核，数据云端同步
   </div>
 </div>
 
@@ -956,7 +960,13 @@ var DB_STD    = 'sG8NqzWIqAuKyYEU2gEuMx';   // 考核标准配置（云端）
 var STD_CLOUD_KEY = 'std_v1';
 var DATABASE_ID = '6Zz1IVhvgFRrFAMRAe2GGX';
 var DEFAULT_PERIOD = '2026-09';
-var DRAFT_KEY = 'wb_wt_kh_draft_v1';
+var MODULE_PARAMS = typeof location !== 'undefined' && typeof URLSearchParams !== 'undefined' ? new URLSearchParams(location.search) : null;
+var MODULE_ORGANIZATION = MODULE_PARAMS && /^[a-z_]+$/.test(MODULE_PARAMS.get('organization') || '') ? MODULE_PARAMS.get('organization') : 'student_union';
+var MODULE_DEPARTMENT = MODULE_PARAMS && /^[a-z_]+$/.test(MODULE_PARAMS.get('department') || '') ? MODULE_PARAMS.get('department') : 'culture_sports_arts';
+var MODULE_LABEL = MODULE_PARAMS && MODULE_PARAMS.get('departmentLabel') || '文体艺术部';
+var MODULE_SCOPE = MODULE_ORGANIZATION + '_' + MODULE_DEPARTMENT;
+var IS_CULTURE = MODULE_SCOPE === 'student_union_culture_sports_arts';
+var DRAFT_KEY = IS_CULTURE ? 'wb_wt_kh_draft_v1' : 'monthly_performance_draft_' + MODULE_SCOPE;
 
 /* 默认考核标准由服务端提供。 */
 var DEFAULT_STD = {
@@ -1017,7 +1027,8 @@ var db = null;
 /* SIEHUB 数据适配：此子路径复用服务器 JWT、团委学生会账号与绩效集合。 */
 var SIEHUB_API = '/api';
 var SIEHUB_TOKEN_KEY = 'siehub_auth_token_v2';
-var CULTURE_PATH = '/hub/departments/student_union/culture_sports_arts/culture-performance';
+var DEPARTMENT_PATH = '/hub/departments/' + MODULE_ORGANIZATION + '/' + MODULE_DEPARTMENT;
+var CULTURE_PATH = DEPARTMENT_PATH + (IS_CULTURE ? '/culture-performance' : '/monthly-performance');
 var siehubWorkbenchCache = null;
 var dataLoadId = 0, evaluationLoadId = 0;
 function siehubToken(){
@@ -1054,10 +1065,10 @@ function siehubScoreRows(data){
   });
 }
 function siehubLoadEvaluations(month){
-  return siehubRequest('/hub/departments/student_union/culture_sports_arts/performance-evaluations?semester=' + encodeURIComponent(month || state.period));
+  return siehubRequest(DEPARTMENT_PATH + '/performance-evaluations?semester=' + encodeURIComponent(month || state.period));
 }
 function siehubSubmitEvaluation(payload){
-  return siehubRequest('/hub/departments/student_union/culture_sports_arts/performance-evaluations', {
+  return siehubRequest(DEPARTMENT_PATH + '/performance-evaluations', {
     method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
   });
 }
@@ -1222,7 +1233,7 @@ function calcDraft(name){
   var bonus = num(d.bonus), minus = num(d.minus);
   total = total + bonus - minus;
   if (total < 0) total = 0;
-  var cap = stdMaxTotal() + num(standard.bonus.max);
+  var cap = standard.bonus.max == null ? Infinity : stdMaxTotal() + num(standard.bonus.max);
   if (total > cap) total = cap;
   return { dims: dims, bonus: bonus, minus: minus, total: r1(total), got: got, all: all };
 }
@@ -1326,7 +1337,7 @@ function renderPick(){
   var box = $('pickList'), html = '';
   var actives = state.people.filter(function(p){ return p['在岗状态'] !== '退出'; });
   if (!actives.length) {
-    box.innerHTML = '<div class="empty" style="padding:14px 0">暂无文体艺术部在岗成员，请在主站账号管理中维护</div>';
+    box.innerHTML = '<div class="empty" style="padding:14px 0">暂无' + esc(MODULE_LABEL) + '在岗成员，请在主站账号管理中维护</div>';
     $('scoreTip').textContent = '';
     return;
   }
@@ -1378,8 +1389,8 @@ function renderScoring(){
     + '<span class="dim-m">直接填写分数</span></div>'
     + '<div class="it"><div><div class="it-n">' + esc(std.bonus.name) + '</div>'
     + '<div class="it-d">' + esc(std.bonus.desc || '') + '</div></div>'
-    + '<input type="number" min="0" max="' + num(std.bonus.max) + '" step="0.5" data-k="bonus" value="' + num(d.bonus) + '" placeholder="0">'
-    + '<div class="it-sc">+' + num(d.bonus || 0) + '<span>/' + num(std.bonus.max) + '</span></div></div>'
+    + '<input type="number" min="0" ' + (std.bonus.max == null ? '' : 'max="' + num(std.bonus.max) + '" ') + 'step="0.5" data-k="bonus" value="' + num(d.bonus) + '" placeholder="0">'
+    + '<div class="it-sc">+' + num(d.bonus || 0) + '<span>/' + (std.bonus.max == null ? '不限' : num(std.bonus.max)) + '</span></div></div>'
     + '<div class="it"><div><div class="it-n">' + esc(std.minus.name) + '</div>'
     + '<div class="it-d">' + esc(std.minus.desc || '') + '</div></div>'
     + '<input type="number" min="0" max="' + num(std.minus.max) + '" step="0.5" data-k="minus" value="' + num(d.minus) + '" placeholder="0">'
@@ -1494,6 +1505,13 @@ function renderStd(){
     dh += '</div>';
   }
   $('stdList').innerHTML = dh;
+  $('adjustmentList').innerHTML = ['bonus', 'minus'].map(function(key){
+    var item = std[key];
+    return '<div class="frm" style="margin-bottom:12px"><div class="fld"><label>' + (key === 'bonus' ? '加分项' : '扣分项') + '名称</label>'
+      + '<input type="text" data-a-n="' + key + '" value="' + esc(item.name) + '"></div>'
+      + '<div class="fld"><label>' + (key === 'bonus' ? '单月上限（留空不限制）' : '单月上限') + '</label><input type="number" min="0" max="100" step="0.5" data-a-m="' + key + '" value="' + (item.max == null ? '' : num(item.max)) + '"></div>'
+      + '<div class="fld"><label>评分说明</label><input type="text" data-a-d="' + key + '" value="' + esc(item.desc || '') + '"></div></div>';
+  }).join('');
   $('stdSum').textContent = std.dims.length + ' 个维度 · ' + tin + ' 个考核项 · 满分 ' + r1(tmax) + ' + 奖惩';
   var w = weight();
   if ($('wLeader')) $('wLeader').value = num(w.leader);
@@ -1787,7 +1805,7 @@ function svgChart(counts, total){
 }
 
 /* ===================== 月份 · 权限 · 自评 ===================== */
-var PERIOD_KEY = 'wb_wt_kh_period_v1';
+var PERIOD_KEY = IS_CULTURE ? 'wb_wt_kh_period_v1' : 'monthly_performance_period_' + MODULE_SCOPE;
 function savePeriod(){ try { localStorage.setItem(PERIOD_KEY, state.period); } catch(e){} }
 function isEdit(){ return state.mode === 'edit' && !!state.access.canManage; }
 function canGradeSelected(){ var p = findPerson(state.cur); return !state.loading && isEdit() && !!(p && p.canGrade); }
@@ -1997,7 +2015,7 @@ function exportCsv(){
       String(s['考核日期'] || '').slice(0, 10), q(logsText(s['工作纪实'])), q(s['自评评语']), s.standardVersion,
       s.standardSnapshot.weight.leader, s.standardSnapshot.weight.self, q(s.targetId)]).join(','));
   }
-  download('文体艺术部_' + state.period + '_绩效考核_' + todayISO() + '.csv', rows.join('\n'), 'text/csv');
+  download(MODULE_LABEL + '_' + state.period + '_绩效考核_' + todayISO() + '.csv', rows.join('\n'), 'text/csv');
   toast('CSV 已导出');
 }
 function exportedDimensions(scores){
@@ -2206,7 +2224,7 @@ function exportXlsx(){
     }
     if (num(sc['加分项']) || num(sc['扣分项']))
       rows2.push([nm, '奖惩', std.bonus.name + ' / ' + std.minus.name, '',
-        num(std.bonus.max) + ' / ' + num(std.minus.max), '直接填写',
+        (std.bonus.max == null ? '不限' : num(std.bonus.max)) + ' / ' + num(std.minus.max), '直接填写',
         r1n(num(sc['加分项'])) - r1n(num(sc['扣分项'])), sc.standardVersion, sc.targetId]);
   }
 
@@ -2215,14 +2233,14 @@ function exportXlsx(){
     { name: '逐项打分明细', rows: rows2, widths: [10, 12, 22, 42, 8, 10, 8] }
   ]);
   var u8 = zipStore(files);
-  downloadBlob('文体艺术部_' + state.period + '_绩效考核_' + todayISO() + '.xlsx', u8,
+  downloadBlob(MODULE_LABEL + '_' + state.period + '_绩效考核_' + todayISO() + '.xlsx', u8,
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   toast('Excel 已导出（' + state.period + ' · 2 个工作表）');
 }
 function r1n(v){ return r1(num(v)); }
 
 /* ===================== 表单输入本地缓存 ===================== */
-var CACHE_KEY = 'wb_wt_kh_form_v1';
+var CACHE_KEY = IS_CULTURE ? 'wb_wt_kh_form_v1' : 'monthly_performance_form_' + MODULE_SCOPE;
 var cacheTimer = null;
 function cacheForm(){
   var v = { n: $('pName').value, r: $('pRole').value, s: $('pSid').value,
@@ -2377,6 +2395,7 @@ function bindEvents(){
   $('lvList').addEventListener('click', onStdClick);
   $('stdList').addEventListener('change', onStdChange);
   $('stdList').addEventListener('click', onStdClick);
+  $('adjustmentList').addEventListener('change', onStdChange);
   $('btnAddLv').addEventListener('click', function(){
     state.std.levels.push({ text: '新等级', ratio: 0.5 }); saveStd(); renderStd(); renderScoring();
   });
@@ -2385,9 +2404,19 @@ function bindEvents(){
     saveStd(); renderStd(); renderScoring();
   });
   $('btnResetStd').addEventListener('click', function(){
-    confirmBox('恢复默认标准', '将把考核维度、考核项与评分等级恢复为内置的 4 维度 11 项标准（出勤参与30 / 工作贡献35 / 团队协作20 / 创新与作风15）。', function(){
-      state.std = JSON.parse(JSON.stringify(DEFAULT_STD)); saveStd();
-      state.draft = {}; saveDraft(); renderStd(); renderScoring(); toast('已恢复默认标准');
+    confirmBox('恢复默认标准', IS_CULTURE
+      ? '将把考核维度、考核项与评分等级恢复为文体艺术部内置的 4 维度 11 项标准。'
+      : '将把本月标准恢复为当前部门的基础模板；已有成绩仍保留保存时的标准快照。', function(){
+      if (IS_CULTURE) {
+        state.std = JSON.parse(JSON.stringify(DEFAULT_STD)); saveStd();
+        state.draft = {}; saveDraft(); renderStd(); renderScoring(); toast('已恢复默认标准');
+        return;
+      }
+      siehubRequest(CULTURE_PATH + '-standards', { method: 'DELETE', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ month: state.period }) })
+        .then(function(){ state.draft = {}; saveDraft(); return fetchData(); })
+        .then(function(){ refreshAll(); toast('已恢复当前部门基础模板'); })
+        .catch(function(e){ toast('恢复失败：' + e.message); });
     });
   });
 
@@ -2478,6 +2507,9 @@ function onStdChange(e){
   else if ((a = t.getAttribute('data-i-n')) !== null) { var p1 = a.split('_'); state.std.dims[+p1[0]].items[+p1[1]].name = t.value; }
   else if ((a = t.getAttribute('data-i-m')) !== null) { var p2 = a.split('_'); state.std.dims[+p2[0]].items[+p2[1]].max = num(t.value); }
   else if ((a = t.getAttribute('data-i-d')) !== null) { var p3 = a.split('_'); state.std.dims[+p3[0]].items[+p3[1]].desc = t.value; }
+  else if ((a = t.getAttribute('data-a-n')) !== null) state.std[a].name = t.value;
+  else if ((a = t.getAttribute('data-a-m')) !== null) state.std[a].max = a === 'bonus' && t.value === '' ? null : num(t.value);
+  else if ((a = t.getAttribute('data-a-d')) !== null) state.std[a].desc = t.value;
   else return;
   saveStd();
   $('stdSum').textContent = '';
@@ -2556,6 +2588,10 @@ document.addEventListener('DOMContentLoaded', function(){ bootPage(); });
 function hideGate(){ var g = $('gateMask'); if (g) g.className = 'gmask'; }
 function bootPage(){
   hideGate();
+  document.title = MODULE_LABEL + '考核绩效平台';
+  document.querySelectorAll('.ttl, .tt').forEach(function(el){ el.textContent = MODULE_LABEL + '考核绩效平台'; });
+  if ($('departmentTermLabel')) $('departmentTermLabel').textContent = MODULE_LABEL + ' · 月度考核';
+  if ($('departmentFooterLabel')) $('departmentFooterLabel').textContent = MODULE_LABEL + '考核绩效平台';
   db = siehubDatabaseAdapter();
   loadStd(); loadDraft(); bindEvents();
   try {
