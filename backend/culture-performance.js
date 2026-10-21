@@ -237,10 +237,16 @@ const installCulturePerformanceRoutes = ({ app, authenticate, logAction, User, C
         scope.Score.find({ ...scoreScope, month }).populate('target', 'name studentId positionTitle isActive').sort({ createdAt: 1 }).lean(),
         loadStandard(scope, month), scope.Score.distinct('month', scoreScope), scope.Standard.distinct('month', scope.legacy ? {} : scope.assignment)
       ]);
+      const visibleScores = manager ? scores.filter(score => {
+        const targetId = String(score.target?._id || score.target);
+        if (targetId === String(req.user._id)) return true;
+        const target = members.find(member => String(member._id) === targetId) || score.targetSnapshot;
+        return target && canGrade(req.user, target, scope);
+      }) : scores;
       res.json({ success: true, month, months: Array.from(new Set([month, ...months, ...standardMonths])).sort(),
         viewerId: String(req.user._id), access: { canManage: manager, canEditStandards: manager },
         members: members.map(member => ({ ...userBrief(member), canGrade: canGrade(req.user, member, scope), canSelf: String(member._id) === String(req.user._id) })),
-        scores: scores.map(serializeCultureScore), standard: standard.configuration, standardVersion: standard.version });
+        scores: visibleScores.map(serializeCultureScore), standard: standard.configuration, standardVersion: standard.version });
     } catch (error) { fail(res, error, '加载部门考核失败'); }
   };
   const saveStandard = async (req, res) => {

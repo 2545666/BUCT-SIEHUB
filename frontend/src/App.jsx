@@ -4362,7 +4362,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
             {isSIEBridge ? (
               <section><span>03</span><h2>SIEBridge 审核</h2><p>课程新增与资料上传申请在此集中审核，通过后展示到学生端。</p><button type="button" disabled>已接入</button></section>
             ) : (
-              <section><span>03</span><h2>绩效考核</h2><p>日常积分、本人评价和部门制度集中在绩效工作区。</p><button type="button" onClick={() => setManageWorkspace('performance')}>进入绩效</button></section>
+              <section><span>03</span><h2>绩效考核</h2><p>月度逐项成绩、自评互评和部门标准集中在绩效工作区。</p><button type="button" onClick={() => setManageWorkspace('performance')}>进入绩效</button></section>
             )}
             <section><span>04</span><h2>成员与归档</h2><p>届次成员、身份标签、分管关系与绩效档案将归入统一组织框架。</p><button type="button" disabled>规划中</button></section>
             <section><span>05</span><h2>部门资料库</h2><p>部门负责人、团委学生兼职团干部和分管主席层级可维护资料；志愿者可在学生端查看下载。</p><button type="button" disabled={!canViewFiles} onClick={() => setManageWorkspace('files')}>{canManageFiles ? '进入资料库' : canViewFiles ? '查看资料' : '未开放'}</button></section>

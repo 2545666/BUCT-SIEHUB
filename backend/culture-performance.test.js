@@ -115,6 +115,17 @@ test('read-only workbench shares one monthly result and never modifies a roster 
   assert.equal(own.body.members[0].canGrade, false);
 });
 
+test('department heads see volunteer rankings but cannot read another leader score', async t => {
+  const h = harness(t);
+  h.scores.set(first._id + '@2026-10', { _id: 'volunteer-score', target: first._id, month: '2026-10', leaderScore: 80, selfScore: 80, standardSnapshot: DEFAULT_CULTURE_STANDARD });
+  const otherLeaderId = '000000000000000000000005';
+  h.scores.set(otherLeaderId + '@2026-10', { _id: 'other-leader-score', target: otherLeaderId, targetSnapshot: { positionTitle: 'department_head' }, month: '2026-10', leaderScore: 90, selfScore: 90, standardSnapshot: DEFAULT_CULTURE_STANDARD });
+  const view = await h.request('GET', 'workbench', leader, {}, { month: '2026-10' });
+  assert.deepEqual(view.body.scores.map(score => score.id), ['volunteer-score']);
+  const chairView = await h.request('GET', 'workbench', manager, {}, { month: '2026-10' });
+  assert.equal(chairView.body.scores.length, 2);
+});
+
 test('server rejects another member self assessment, unauthorized leader grading and stale standards', async t => {
   const h = harness(t), body = { month: '2026-10', targetId: second._id, mode: 'self', selfScore: 0, workLogs: [{ t: '活动', w: '工作' }] };
   assert.equal((await h.request('PUT', 'scores', first, body)).code, 403);

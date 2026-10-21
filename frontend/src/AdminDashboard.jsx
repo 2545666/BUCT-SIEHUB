@@ -10,6 +10,7 @@ import FeedbackPagination from './FeedbackPagination';
 import { buildCalibrations } from './feedbackState';
 import { ServiceHealthNote, useServiceMetrics } from './platformStatus';
 import { sievoxRoleCopy } from './sievoxPortal';
+import PerformanceDimensionRadar from './PerformanceDimensionRadar';
 
 
 // ===================== 全局配置字典 =====================
@@ -172,6 +173,20 @@ const getMemberSortRank = (member = {}) => {
   return 3;
 };
 const getMemberPerformanceTotal = member => Number(member?.performanceSnapshot?.total || 0);
+const GovernancePerformance = ({ snapshot }) => {
+  if (!snapshot || (snapshot.source === 'none' && !(snapshot.monthlyScores || []).length && !(snapshot.records || []).length)) return <span>暂无成绩</span>;
+  const monthly = (snapshot.monthlyScores || []).length > 0;
+  const completed = (snapshot.monthlyScores || []).filter(item => item.combinedScore != null);
+  const dimensions = snapshot.dimensions?.length ? snapshot.dimensions : (snapshot.policy?.dimensions || [])
+    .filter(item => item.scoringMode !== 'bonus')
+    .map(item => ({ name: item.label, score: Number(snapshot.byDimension?.[item.key] || 0), max: Number(item.maxScore || 0) }));
+  return <details className="org-performance-detail">
+    <summary>{snapshot.source === 'monthly' ? `月均 ${Number(snapshot.total || 0).toFixed(1)}` : snapshot.source === 'legacy' || !snapshot.source ? `旧制总分 ${Number(snapshot.total || 0).toFixed(1)}` : '月度待完成'}{monthly && <small> · 已完成 {completed.length} 个月</small>}</summary>
+    <PerformanceDimensionRadar dimensions={dimensions} label="归档绩效维度" />
+    {monthly && <div className="org-performance-months">{(snapshot.monthlyScores || []).map(item => <span key={item.id || item.month}>{item.month}：{item.combinedScore == null ? '未完成' : `${Number(item.combinedScore).toFixed(1)} 分`}</span>)}</div>}
+    {(snapshot.records || []).length > 0 && <small>另保留旧制积分流水 {snapshot.records.length} 条，不计入月度平均分。</small>}
+  </details>;
+};
 const getMemberTierRank = (member = {}) => {
   const positionTitle = member.positionTitle || member.user?.positionTitle || 'student';
   const memberRole = member.memberRole || member.user?.memberRole || 'student';
@@ -501,7 +516,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
   const handleArchive = async () => {
     if (!selectedCohortId) return alert('请先选择届次');
     if (isArchivedCohort) return alert('该届次已经归档');
-    if (!window.confirm('确认归档该届次吗？归档会冻结成员账号信息、身份与绩效快照。')) return;
+    if (!window.confirm('确认归档该届次吗？归档会冻结成员身份、月度成绩、自评互评、评分标准快照与旧制积分流水。')) return;
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/ultimate/cohorts/${selectedCohortId}/archive`, {
@@ -628,8 +643,8 @@ export const OrganizationFrameworkPanel = ({ token }) => {
           {[
             ['学生', '学生端', '仅提交与查看自己的反馈'],
             ['志愿者', '子管理员端', '处理反馈并查看本人绩效'],
-            ['部门负责人 / 团委学生兼职团干部', '超级管理员端', '管理所属单一部门'],
-            ['主席团成员 / 团委学生兼职副书记', '超级管理员端', '管理被分配的多个分管部门']
+            ['部门负责人 / 团委学生兼职团干部', '超级管理员端', '管理本部门并查看志愿者排名'],
+            ['主席团成员 / 团委学生兼职副书记', '超级管理员端', '查看分管部门志愿者排名与负责人绩效']
           ].map(([role, portal, scope]) => (
             <div key={role} className="rounded-xl border border-white/10 bg-slate-900/50 p-4">
               <div className="text-sm font-bold text-white">{role}</div>
@@ -780,7 +795,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
                         <td className="px-4 py-3">{getGovernanceMemberRoleTitle(item)}</td>
                         <td className="px-4 py-3">{item.departmentLabel || '-'}</td>
                         <td className="px-4 py-3">{(item.managedDepartments || []).length > 0 ? item.managedDepartments.map(d => d.label || `${d.organizationLabel} · ${d.departmentLabel}`).join('、') : '-'}</td>
-                        <td className="px-4 py-3">{getMemberTierRank(item) === 2 ? (item.performanceSnapshot?.total ?? 0) : '-'}</td>
+                        <td className="px-4 py-3">{getMemberTierRank(item) > 0 ? <GovernancePerformance snapshot={item.performanceSnapshot} /> : '-'}</td>
                         <td className="px-4 py-3">
                           <button disabled={isArchivedCohort} onClick={() => handleEditMember(item)} className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-purple-500/30 disabled:opacity-40 text-xs text-purple-100 transition-all">
                             编辑
@@ -841,7 +856,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
                             </div>
                             <div className="space-y-2">
                               {group.members.map(member => {
-                                const canShowPerformance = member.memberRole === 'volunteer' || member.positionTitle === 'volunteer';
+                                const canShowPerformance = getMemberTierRank(member) > 0;
                                 return (
                                   <div key={member.id || member._id} className="siehub-member-tier-card rounded-xl border px-3 py-2.5" data-tier={group.rank} style={getGovernanceTierVisualStyle(group.rank)}>
                                     <div className="flex items-start justify-between gap-3">
@@ -850,12 +865,13 @@ export const OrganizationFrameworkPanel = ({ token }) => {
                                         <div className="text-[10px] opacity-70">{member.studentId}</div>
                                       </div>
                                       {canShowPerformance ? (
-                                        <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-100">绩效 {member.performanceSnapshot?.total ?? 0}</span>
+                                        <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-100">{member.performanceSnapshot?.source === 'none' ? (member.performanceSnapshot?.monthlyScores?.length ? '待完成' : '暂无成绩') : `${member.performanceSnapshot?.source === 'monthly' ? '月均' : '绩效'} ${Number(member.performanceSnapshot?.total || 0).toFixed(1)}`}</span>
                                       ) : (
                                         <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold opacity-70">无绩效</span>
                                       )}
                                     </div>
                                     <div className="mt-2 text-[10px] opacity-75">{getGovernanceMemberRoleTitle(member)}</div>
+                                    {canShowPerformance && <GovernancePerformance snapshot={member.performanceSnapshot} />}
                                   </div>
                                 );
                               })}

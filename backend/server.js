@@ -23,7 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const { rateLimit } = require('express-rate-limit');
 const { idOf, isConsistentIdentity, serializeFeedbackForViewer, paginationOf, canResetPassword, summarizeEvaluations, calculatePerformance, safeUploadType, matchesFileSignature } = require('./security-policy');
-const { installCulturePerformanceRoutes } = require('./culture-performance');
+const { installCulturePerformanceRoutes, CultureMonthlyScore, DepartmentMonthlyScore, serializeCultureScore } = require('./culture-performance');
 const {
   ORGANIZATIONS,
   MEMBER_ROLES,
@@ -797,6 +797,11 @@ const cohortMembershipSchema = new mongoose.Schema({
     rawByDimension: mongoose.Schema.Types.Mixed,
     policy: mongoose.Schema.Types.Mixed,
     semesters: { type: [String], default: [] },
+    source: String,
+    dimensions: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    monthlyScores: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    evaluations: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    legacySnapshot: mongoose.Schema.Types.Mixed,
     archivedAt: Date
   },
   endedAt: Date,
@@ -2642,14 +2647,57 @@ const ensurePerformanceRecordAccess = (user, record) => {
   );
 };
 
+const monthsForPerformanceSemesters = semesters => [...new Set(semesters.flatMap(value => {
+  const name = String(value || '').trim();
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(name)) return [name];
+  const match = name.match(/(\d{4})\D+(\d{4}).*?第?\s*([一二12])\s*学期/);
+  if (!match) return [];
+  const firstTerm = ['一', '1'].includes(match[3]);
+  return Array.from({ length: 6 }, (_, index) => {
+    const monthIndex = (firstTerm ? 7 : 1) + index;
+    const year = (firstTerm ? Number(match[1]) : Number(match[2])) + Math.floor(monthIndex / 12);
+    return `${year}-${String(monthIndex % 12 + 1).padStart(2, '0')}`;
+  });
+}))];
+
 const buildPerformanceSnapshot = async (userId, semesters = [], assignment = {}) => {
   if (!userId || !isValidManagedDepartment(assignment)) return { total: 0, byDimension: {}, records: [], semesters, archivedAt: new Date() };
   const query = { volunteer: userId, organization: assignment.organization, department: assignment.department };
   if (semesters.length > 0) query.semester = { $in: semesters };
-  const records = await loadPerformanceRecords(query);
-  const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne({ organization: assignment.organization, department: assignment.department }).lean(), assignment.organization, assignment.department);
-  const scores = calculatePerformance(records, policy);
-  return { ...scores, records, semesters, policy, archivedAt: new Date() };
+  const months = monthsForPerformanceSemesters(semesters);
+  const monthlyModel = assignment.organization === 'student_union' && assignment.department === 'culture_sports_arts' ? CultureMonthlyScore : DepartmentMonthlyScore;
+  const monthlyQuery = { target: userId, organization: assignment.organization, department: assignment.department, month: { $in: months } };
+  const [records, policyDoc, monthlyDocs, evaluationDocs] = await Promise.all([
+    loadPerformanceRecords(query),
+    DepartmentPerformancePolicy.findOne({ organization: assignment.organization, department: assignment.department }).lean(),
+    months.length ? monthlyModel.find(monthlyQuery).lean() : [],
+    months.length ? PerformanceEvaluation.find({ target: userId, organization: assignment.organization, department: assignment.department, semester: { $in: [...semesters, ...months] } }).lean() : []
+  ]);
+  const policy = serializeDepartmentPerformancePolicy(policyDoc, assignment.organization, assignment.department);
+  const legacySnapshot = calculatePerformance(records, policy);
+  const monthlyScores = monthlyDocs.map(serializeCultureScore).sort((a, b) => a.month.localeCompare(b.month));
+  const completed = monthlyScores.filter(score => score.combinedScore !== null);
+  const dimensionRows = new Map();
+  for (const score of completed) for (const dimension of score.standardSnapshot?.dims || []) {
+    const entry = dimensionRows.get(dimension.name) || { name: dimension.name, score: 0, max: 0, count: 0 };
+    entry.score += Number(score.dimensionScores?.[dimension.name] || 0);
+    entry.max += Number(dimension.max || 0);
+    entry.count += 1;
+    dimensionRows.set(dimension.name, entry);
+  }
+  const monthlyDimensions = [...dimensionRows.values()].map(item => ({ name: item.name, score: Math.round(item.score / item.count * 10) / 10, max: Math.round(item.max / item.count * 10) / 10 }));
+  const hasMonthly = completed.length > 0;
+  const dimensions = hasMonthly ? monthlyDimensions : (policy.dimensions || [])
+    .filter(item => item.scoringMode !== 'bonus')
+    .map(item => ({ name: item.label, score: Number(legacySnapshot.byDimension?.[item.key] || 0), max: Number(item.maxScore || 0) }));
+  return {
+    total: hasMonthly ? Math.round(completed.reduce((sum, score) => sum + score.combinedScore, 0) / completed.length * 10) / 10 : legacySnapshot.total,
+    byDimension: hasMonthly ? Object.fromEntries(monthlyDimensions.map(item => [item.name, item.score])) : legacySnapshot.byDimension,
+    rawByDimension: legacySnapshot.rawByDimension, records, semesters, policy,
+    source: hasMonthly ? 'monthly' : records.length ? 'legacy' : 'none', dimensions, monthlyScores,
+    evaluations: evaluationDocs.map(item => ({ month: item.semester, kind: item.kind, score: item.score, comment: item.comment, createdAt: item.createdAt })),
+    legacySnapshot, archivedAt: new Date()
+  };
 };
 
 const serializeCohort = (cohort) => ({
@@ -2687,6 +2735,23 @@ const serializeCohortMember = (member) => {
     performanceSnapshot: member.performanceSnapshot || {},
     archivedAt: member.archivedAt || null
   };
+};
+
+const rankArchivedVolunteers = (members) => {
+  const groups = new Map();
+  for (const member of members) {
+    const snapshot = member.performanceSnapshot || {};
+    snapshot.rank = undefined;
+    if (member.memberRole !== 'volunteer' || snapshot.source === 'none' ||
+      (snapshot.monthlyScores?.length && !snapshot.monthlyScores.some(score => score.combinedScore !== null && score.combinedScore !== undefined))) continue;
+    const key = `${member.organization || ''}:${member.department || ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(member);
+  }
+  for (const group of groups.values()) {
+    group.sort((a, b) => Number(b.performanceSnapshot.total || 0) - Number(a.performanceSnapshot.total || 0));
+    group.forEach((member, index) => { member.performanceSnapshot.rank = index + 1; });
+  }
 };
 
 const normalizeDepartmentPairs = (items = []) => (Array.isArray(items) ? items : [])
@@ -3013,8 +3078,8 @@ async function archiveCohort(cohortId, actorId) {
         });
       }
     }
-    const ordered = [...members].sort((a, b) => (b.performanceSnapshot?.total || 0) - (a.performanceSnapshot?.total || 0));
-    for (let index = 0; index < ordered.length; index++) await CohortMembership.updateOne({ _id: ordered[index]._id }, { $set: { 'performanceSnapshot.rank': index + 1 } });
+    rankArchivedVolunteers(members);
+    for (const member of members) await CohortMembership.updateOne({ _id: member._id }, member.performanceSnapshot?.rank ? { $set: { 'performanceSnapshot.rank': member.performanceSnapshot.rank } } : { $unset: { 'performanceSnapshot.rank': '' } });
     cohort.status = 'archived'; cohort.archivedAt = new Date(); cohort.archivedBy = actorId; await cohort.save();
     return { cohort, archivedMembers: members.length };
     });
@@ -4386,7 +4451,16 @@ app.get('/api/ultimate/members', authenticate, ultimateOnly, async (req, res) =>
       .populate('user', 'name studentId email phone role memberRole positionTitle organization department managedDepartments isUltimateAdmin')
       .sort({ createdAt: -1 })
       .lean();
-    res.json({ success: true, members: filterCohortMembershipsForDisplay(members, cohort).map(serializeCohortMember) });
+    const visible = filterCohortMembershipsForDisplay(members, cohort);
+    const semesters = cohort?.semesters?.length ? cohort.semesters : [await getCurrentSemesterName()];
+    const serialized = await Promise.all(visible.map(async member => {
+      const result = serializeCohortMember(member);
+      if (cohort && cohort.status !== 'archived' && !(member.endedAt && member.performanceSnapshot?.archivedAt) && isValidManagedDepartment(member)) {
+        result.performanceSnapshot = await buildPerformanceSnapshot(member.user?._id || member.user, semesters, member);
+      }
+      return result;
+    }));
+    res.json({ success: true, members: serialized });
   } catch (error) {
     res.status(500).json({ success: false, message: '获取届次成员失败' });
   }
@@ -4456,10 +4530,8 @@ app.get('/api/ultimate/cohorts/:id/archive-preview', authenticate, ultimateOnly,
       };
     }));
 
+    rankArchivedVolunteers(previews);
     previews.sort((a, b) => Number(b.performanceSnapshot?.total || 0) - Number(a.performanceSnapshot?.total || 0));
-    previews.forEach((member, index) => {
-      member.performanceSnapshot.rank = index + 1;
-    });
 
     res.json({ success: true, cohort: serializeCohort(cohort), members: previews });
   } catch (error) {
@@ -5941,8 +6013,8 @@ app.getLoginTokenExpiresIn = getLoginTokenExpiresIn;
 app.isMobileUserAgent = isMobileUserAgent;
 app.shouldPersistLogin = shouldPersistLogin;
 app.filterCohortMembershipsForDisplay = filterCohortMembershipsForDisplay;
-app.backendHelpers = { authenticate, ensureFeedbackAccess, canReadFeedback, buildDepartmentScopedQuery, verifyEmailCode, issueEmailVerification, hashVerificationCode, getFirstAdminResponseAt, buildIdentityUpdate, commitUserIdentity, archiveCohort, replaceRoster, createPerformanceRecords, loadPerformanceRecords, setAccountPassword, saveDepartmentIntroduction, serializePerformanceEvaluation, getDepartmentPerformanceAccess, canSubmitPerformanceEvaluation };
-app.models = { User, Feedback, Cohort, CohortMembership, SemesterMember, PerformanceRecord, PerformanceCalibration, PerformanceEvaluation, DepartmentPerformancePolicy, EmailVerification, VerificationWindow, OperationLock, SystemConfig, RevokedSession, PrivateUpload, Notification, AuditLog, DepartmentIntroduction, DepartmentIntroductionRevision };
+app.backendHelpers = { authenticate, ensureFeedbackAccess, canReadFeedback, buildDepartmentScopedQuery, verifyEmailCode, issueEmailVerification, hashVerificationCode, getFirstAdminResponseAt, buildIdentityUpdate, commitUserIdentity, archiveCohort, buildPerformanceSnapshot, monthsForPerformanceSemesters, rankArchivedVolunteers, replaceRoster, createPerformanceRecords, loadPerformanceRecords, setAccountPassword, saveDepartmentIntroduction, serializePerformanceEvaluation, getDepartmentPerformanceAccess, canSubmitPerformanceEvaluation };
+app.models = { User, Feedback, Cohort, CohortMembership, SemesterMember, PerformanceRecord, PerformanceCalibration, PerformanceEvaluation, CultureMonthlyScore, DepartmentMonthlyScore, DepartmentPerformancePolicy, EmailVerification, VerificationWindow, OperationLock, SystemConfig, RevokedSession, PrivateUpload, Notification, AuditLog, DepartmentIntroduction, DepartmentIntroductionRevision };
 
 if (require.main === module) {
   startServer();

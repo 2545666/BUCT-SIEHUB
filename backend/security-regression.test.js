@@ -305,6 +305,30 @@ test('an archived cohort retry performs no user writes, freezes no new snapshots
   assert.equal(result.archivedMembers, 4); assert.equal(userWrite.mock.callCount(), 0);
 });
 
+test('cohort snapshots average completed monthly results and retain incomplete months, evaluations and old records', async t => {
+  performanceReads(t, [{ volunteer: volunteer._id, dimension: 'attendance', score: 8, semester: '2026-2027学年 第一学期' }]);
+  const standard = { weight: { leader: 70, self: 30 }, dims: [{ name: '考勤', max: 60 }, { name: '贡献', max: 40 }] };
+  const scores = [
+    { _id: 'oct', target: volunteer._id, month: '2026-10', leaderScore: 90, selfScore: 70, dimensionScores: { 考勤: 54, 贡献: 36 }, standardSnapshot: standard },
+    { _id: 'nov', target: volunteer._id, month: '2026-11', leaderScore: 100, selfScore: 80, dimensionScores: { 考勤: 60, 贡献: 40 }, standardSnapshot: standard },
+    { _id: 'dec', target: volunteer._id, month: '2026-12', leaderScore: 80, selfScore: null, dimensionScores: { 考勤: 48, 贡献: 32 }, standardSnapshot: standard }
+  ];
+  t.mock.method(models.DepartmentMonthlyScore, 'find', filter => {
+    assert.deepEqual(filter.month.$in, ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01']);
+    return query(scores);
+  });
+  t.mock.method(models.PerformanceEvaluation, 'find', () => query([{ semester: '2026-10', kind: 'volunteer_peer', score: 88, comment: '配合顺畅' }]));
+  const snapshot = await helpers.buildPerformanceSnapshot(volunteer._id, ['2026-2027学年 第一学期'], rights);
+  assert.equal(snapshot.source, 'monthly');
+  assert.equal(snapshot.total, 89);
+  assert.equal(snapshot.monthlyScores.length, 3);
+  assert.equal(snapshot.monthlyScores[2].combinedScore, null);
+  assert.equal(snapshot.byDimension.考勤, 57);
+  assert.equal(snapshot.records.length, 1);
+  assert.equal(snapshot.legacySnapshot.total, 8);
+  assert.equal(snapshot.evaluations[0].score, 88);
+});
+
 test('archiving freezes historical members and protects a newer current cohort identity', async t => {
   lockMocks(t); performanceReads(t);
   const cohort = { _id: 'old', semesters: ['2026'], status: 'active', async save() {} };
@@ -317,6 +341,58 @@ test('archiving freezes historical members and protects a newer current cohort i
   const updates = t.mock.method(models.User, 'updateOne', async () => ({}));
   await helpers.archiveCohort('old', leader._id);
   assert.ok(member.archivedAt); assert.equal(cohort.status, 'archived'); assert.equal(updates.mock.callCount(), 0);
+});
+
+test('cohort archive freezes monthly score details before closing the cohort', async t => {
+  lockMocks(t); performanceReads(t);
+  const cohort = { _id: 'monthly', semesters: ['2026-2027学年 第一学期'], status: 'active', async save() {} };
+  const member = { _id: 'monthly-member', cohort: cohort._id, user: { ...volunteer, activeCohortId: 'new' }, memberRole: 'volunteer', positionTitle: 'volunteer', ...rights, async save() {} };
+  t.mock.method(models.Cohort, 'findById', async () => cohort);
+  t.mock.method(models.CohortMembership, 'find', () => query([member]));
+  t.mock.method(models.CohortMembership, 'exists', async () => true);
+  t.mock.method(models.CohortMembership, 'updateOne', async () => ({}));
+  t.mock.method(models.DepartmentMonthlyScore, 'find', () => query([{ _id: 'monthly-score', target: volunteer._id, month: '2026-10', leaderScore: 90, selfScore: 70, dimensionScores: { 考勤: 90 }, standardSnapshot: { weight: { leader: 70, self: 30 }, dims: [{ name: '考勤', max: 100 }] } }]));
+  t.mock.method(models.PerformanceEvaluation, 'find', () => query([]));
+  await helpers.archiveCohort(cohort._id, leader._id);
+  assert.equal(cohort.status, 'archived');
+  assert.equal(member.performanceSnapshot.total, 84);
+  assert.equal(member.performanceSnapshot.monthlyScores[0].id, 'monthly-score');
+  assert.equal(member.performanceSnapshot.dimensions[0].score, 90);
+});
+
+test('archive ranks only volunteers with completed scores within each department', () => {
+  const member = (id, role, department, source, total, monthlyScores = []) => ({
+    id, memberRole: role, organization: 'student_union', department,
+    performanceSnapshot: { source, total, monthlyScores, rank: 99 }
+  });
+  const members = [
+    member('a', 'volunteer', 'rights', 'monthly', 90, [{ combinedScore: 90 }]),
+    member('b', 'volunteer', 'rights', 'monthly', 0, [{ combinedScore: null }]),
+    member('c', 'department_lead', 'rights', 'monthly', 95, [{ combinedScore: 95 }]),
+    member('d', 'volunteer', 'rights', 'monthly', 80, [{ combinedScore: 80 }]),
+    member('e', 'volunteer', 'culture', 'monthly', 70, [{ combinedScore: 70 }]),
+    member('f', 'volunteer', 'rights', 'legacy', 10, [{ combinedScore: null }])
+  ];
+  helpers.rankArchivedVolunteers(members);
+  assert.deepEqual(members.map(item => item.performanceSnapshot.rank), [1, undefined, undefined, 2, 1, undefined]);
+});
+
+test('ultimate organization member list shows current monthly performance and keeps archived snapshots frozen', async t => {
+  performanceReads(t);
+  let status = 'active';
+  const member = { _id: 'member', cohort: 'cohort', user: volunteer, memberRole: 'volunteer', positionTitle: 'volunteer', ...rights, performanceSnapshot: { total: 12, source: 'legacy' } };
+  t.mock.method(models.Cohort, 'findById', () => query({ _id: 'cohort', status, semesters: ['2026-2027学年 第一学期'] }));
+  t.mock.method(models.CohortMembership, 'find', () => query([member]));
+  t.mock.method(models.DepartmentMonthlyScore, 'find', () => query([{ _id: 'live', target: volunteer._id, month: '2026-10', leaderScore: 90, selfScore: 70, standardSnapshot: { weight: { leader: 70, self: 30 }, dims: [{ name: '考勤', max: 100 }] }, dimensionScores: { 考勤: 90 } }]));
+  t.mock.method(models.PerformanceEvaluation, 'find', () => query([]));
+  const req = request({ isUltimateAdmin: true }); req.query = { cohortId: 'cohort' };
+  const live = response();
+  await handler('get', '/api/ultimate/members')(req, live);
+  assert.equal(live.body.members[0].performanceSnapshot.total, 84);
+  status = 'archived';
+  const archived = response();
+  await handler('get', '/api/ultimate/members')(req, archived);
+  assert.equal(archived.body.members[0].performanceSnapshot.total, 12);
 });
 
 test('roster upsert failure restores the saved roster and managed-semester configuration', async t => {

@@ -3618,15 +3618,39 @@ html[data-theme="dark"] .siehub-policy-note {
 .unified-performance-dimensions span,
 .unified-performance-summary span { display: inline-flex; gap: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 12px; }
 .unified-performance-summary { display: grid; gap: 12px; margin-top: 16px; }
+.unified-performance-summary h5 { margin: 4px 0 0; color: var(--ink); font-size: 14px; }
 .unified-performance-summary article { display: grid; gap: 8px; }
 .unified-performance-result-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .unified-performance-result-title small { color: var(--muted); font-size: 12px; }
 .unified-performance-result-title em { margin-left: 6px; color: var(--muted); font-size: 11px; font-style: normal; font-weight: 500; }
 .unified-performance-summary article > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.unified-performance-ranking { margin-top: 16px; display: grid; gap: 10px; }
+.unified-performance-ranking h5 { margin: 0; color: var(--ink); font-size: 14px; }
+.unified-performance-ranking ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.unified-performance-ranking li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); }
+.unified-performance-ranking li b { color: var(--theme-primary); }
+.unified-performance-detail { margin-top: 10px; color: var(--ink); }
+.unified-performance-detail summary { cursor: pointer; font-size: 12px; font-weight: 700; }
+.performance-dimension-radar { display: grid; grid-template-columns: minmax(180px, 260px) minmax(150px, 1fr); align-items: center; gap: 16px; margin-top: 12px; }
+.performance-dimension-radar svg { display: block; width: 100%; overflow: visible; }
+.performance-dimension-radar text { fill: var(--ink); font-size: 10px; }
+.performance-dimension-grid { fill: none; stroke: var(--line); stroke-width: 1; }
+.performance-dimension-axis { stroke: var(--line); stroke-width: 1; }
+.performance-dimension-value { fill: color-mix(in srgb, var(--theme-primary) 25%, transparent); stroke: var(--theme-primary); stroke-width: 2; }
+.performance-dimension-values { display: grid; gap: 6px; }
+.performance-dimension-values span { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--ink); }
+.performance-dimension-values b { white-space: nowrap; }
+.org-performance-detail { min-width: 170px; color: #fff; font-size: 12px; }
+.org-performance-detail summary { cursor: pointer; font-weight: 800; white-space: nowrap; }
+.org-performance-detail summary small { font-weight: 500; opacity: .7; }
+.org-performance-detail .performance-dimension-radar { grid-template-columns: 200px; gap: 4px; }
+.org-performance-detail .performance-dimension-radar text { fill: #f8fafc; }
+.org-performance-detail .performance-dimension-values span { color: #f8fafc; }
+.org-performance-months { display: grid; gap: 4px; margin: 8px 0; }
 .unified-performance-records { margin-top: 16px; color: var(--ink); font-size: 13px; }
 .unified-performance-records summary { cursor: pointer; font-weight: 800; }
 .unified-performance-records p { margin: 8px 0; padding: 8px 0; border-bottom: 1px solid var(--line); }
-@media (max-width: 640px) { .unified-performance-own, .unified-performance-form { grid-template-columns: 1fr; }.unified-performance-period, .unified-performance-period select { width: 100%; min-width: 0; } }
+@media (max-width: 640px) { .unified-performance-own, .unified-performance-form, .performance-dimension-radar { grid-template-columns: 1fr; }.unified-performance-period, .unified-performance-period select { width: 100%; min-width: 0; } }
 
 .siehub-performance-panel-head {
   justify-content: flex-start;
