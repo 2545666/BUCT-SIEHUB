@@ -177,14 +177,17 @@ const GovernancePerformance = ({ snapshot }) => {
   if (!snapshot || (snapshot.source === 'none' && !(snapshot.monthlyScores || []).length && !(snapshot.records || []).length)) return <span>暂无成绩</span>;
   const monthly = (snapshot.monthlyScores || []).length > 0;
   const completed = (snapshot.monthlyScores || []).filter(item => item.combinedScore != null);
-  const dimensions = snapshot.dimensions?.length ? snapshot.dimensions : (snapshot.policy?.dimensions || [])
+  const semester = (snapshot.semesterScores || []).length > 0;
+  const completedSemesters = (snapshot.semesterScores || []).filter(item => item.total != null);
+  const dimensions = snapshot.source === 'semester' ? (snapshot.dimensions || []) : snapshot.dimensions?.length ? snapshot.dimensions : (snapshot.policy?.dimensions || [])
     .filter(item => item.scoringMode !== 'bonus')
     .map(item => ({ name: item.label, score: Number(snapshot.byDimension?.[item.key] || 0), max: Number(item.maxScore || 0) }));
   return <details className="org-performance-detail">
-    <summary>{snapshot.source === 'monthly' ? `月均 ${Number(snapshot.total || 0).toFixed(1)}` : snapshot.source === 'legacy' || !snapshot.source ? `旧制总分 ${Number(snapshot.total || 0).toFixed(1)}` : '月度待完成'}{monthly && <small> · 已完成 {completed.length} 个月</small>}</summary>
-    <PerformanceDimensionRadar dimensions={dimensions} label="归档绩效维度" />
-    {monthly && <div className="org-performance-months">{(snapshot.monthlyScores || []).map(item => <span key={item.id || item.month}>{item.month}：{item.combinedScore == null ? '未完成' : `${Number(item.combinedScore).toFixed(1)} 分`}</span>)}</div>}
-    {(snapshot.records || []).length > 0 && <small>另保留旧制积分流水 {snapshot.records.length} 条，不计入月度平均分。</small>}
+    <summary>{snapshot.source === 'semester' ? snapshot.total == null ? '学期成绩待完成' : `学期均分 ${Number(snapshot.total).toFixed(1)}` : snapshot.source === 'monthly' ? `旧月均 ${Number(snapshot.total || 0).toFixed(1)}` : snapshot.source === 'legacy' || !snapshot.source ? `旧制总分 ${Number(snapshot.total || 0).toFixed(1)}` : '暂无成绩'}{snapshot.source === 'semester' && <small> · 已完成 {completedSemesters.length} 学期</small>}{snapshot.source === 'monthly' && <small> · 已完成 {completed.length} 个月</small>}</summary>
+    {dimensions.length > 0 && <PerformanceDimensionRadar dimensions={dimensions} label="归档绩效维度" />}
+    {semester && <div className="org-performance-months">{snapshot.semesterScores.map(item => <span key={item.semester}>{item.semester}：{item.total == null ? '未完成' : `${Number(item.total).toFixed(1)} 分`}</span>)}</div>}
+    {monthly && <details><summary>查看旧月度成绩</summary><div className="org-performance-months">{snapshot.monthlyScores.map(item => <span key={item.id || item.month}>{item.month}：{item.combinedScore == null ? '未完成' : `${Number(item.combinedScore).toFixed(1)} 分`}</span>)}</div></details>}
+    {(snapshot.records || []).length > 0 && <small>保留旧制积分流水 {snapshot.records.length} 条。</small>}
   </details>;
 };
 const getMemberTierRank = (member = {}) => {
@@ -326,6 +329,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
   const [cohortForm, setCohortForm] = useState({ name: '2026届团委学生会', semesters: '', status: 'active' });
   const [memberForm, setMemberForm] = useState(emptyMemberForm);
   const [archivePreview, setArchivePreview] = useState(null);
+  const [reviewWindow, setReviewWindow] = useState(null);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -348,6 +352,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
     return baseList;
   }, [memberSearchQuery, memberForm.studentId, visibleUsers]);
   const sortedMembers = useMemo(() => sortMembersForGovernance(members), [members]);
+  const performanceMembers = members.filter(member => ['volunteer', 'department_lead'].includes(member.memberRole) && member.organization && member.department);
   const archiveGroups = useMemo(() => groupMembersByDepartment(archivePreview?.members || []), [archivePreview]);
   const memberTierGroups = useMemo(() => groupMembersByTier(sortedMembers), [sortedMembers]);
   const singleDepartmentOptions = memberForm.positionTitle === 'youth_league_cadre'
@@ -361,12 +366,14 @@ export const OrganizationFrameworkPanel = ({ token }) => {
 
   const loadBase = useCallback(async () => {
     try {
-      const [cohortRes, userRes] = await Promise.all([
+      const [cohortRes, userRes, reviewRes] = await Promise.all([
         fetch(`${API_BASE}/ultimate/cohorts`, { headers: authHeaders }),
-        fetch(`${API_BASE}/ultimate/users`, { headers: authHeaders })
+        fetch(`${API_BASE}/ultimate/users`, { headers: authHeaders }),
+        fetch(`${API_BASE}/ultimate/performance-review-window`, { headers: authHeaders })
       ]);
       const cohortData = await cohortRes.json();
       const userData = await userRes.json();
+      const reviewData = await reviewRes.json();
       if (cohortData.success) {
         const nextCohorts = cohortData.cohorts || [];
         setCohorts(nextCohorts);
@@ -374,6 +381,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
         if ((!selectedCohortId || !stillExists) && nextCohorts.length > 0) setSelectedCohortId(nextCohorts[0].id || nextCohorts[0]._id);
       }
       if (userData.success) setUsers(userData.users || []);
+      if (reviewData.success) setReviewWindow(reviewData);
     } catch (error) {
       console.error('加载组织归档基础数据失败:', error);
     }
@@ -407,7 +415,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
         body: JSON.stringify({
           name: cohortForm.name.trim(),
           status: cohortForm.status,
-          semesters: cohortForm.semesters.split(/[\s,，]+/).map(item => item.trim()).filter(Boolean)
+          semesters: cohortForm.semesters.split(/[,，\n]+/).map(item => item.trim()).filter(Boolean)
         })
       });
       const data = await res.json();
@@ -516,7 +524,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
   const handleArchive = async () => {
     if (!selectedCohortId) return alert('请先选择届次');
     if (isArchivedCohort) return alert('该届次已经归档');
-    if (!window.confirm('确认归档该届次吗？归档会冻结成员身份、月度成绩、自评互评、评分标准快照与旧制积分流水。')) return;
+    if (!window.confirm('确认归档该届次吗？归档会冻结成员身份、各学期绩效与学年汇总，旧月度记录保留供查阅。')) return;
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/ultimate/cohorts/${selectedCohortId}/archive`, {
@@ -533,6 +541,33 @@ export const OrganizationFrameworkPanel = ({ token }) => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleArchivePerformanceSemester = async semester => {
+    if (!selectedCohortId || isArchivedCohort) return;
+    if (!window.confirm(`归档 ${semester} 的绩效成绩？归档后该学期评价不可修改。`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/ultimate/cohorts/${selectedCohortId}/performance-semesters/${encodeURIComponent(semester)}/archive`, { method: 'POST', headers: authHeaders });
+      const data = await res.json();
+      if (!data.success) return alert(data.message || '学期绩效归档失败');
+      await loadMembers(selectedCohortId);
+      setArchivePreview(null);
+      alert(`${semester} 已归档，共保存 ${data.archivedMembers || 0} 名成员的学期绩效`);
+    } catch (error) { alert('学期绩效归档失败'); }
+    finally { setBusy(false); }
+  };
+
+  const handleReviewWindow = async () => {
+    if (!reviewWindow?.currentSemester) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/ultimate/performance-review-window`, { method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ semester: reviewWindow.currentSemester, open: !reviewWindow.open }) });
+      const data = await res.json();
+      if (!data.success) return alert(data.message || '更新评价时间失败');
+      setReviewWindow(data);
+    } catch { alert('更新评价时间失败'); }
+    finally { setBusy(false); }
   };
 
   const handleDeleteCohort = async () => {
@@ -663,7 +698,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
           </div>
           <form onSubmit={handleCreateCohort} className="space-y-3">
             <input value={cohortForm.name} onChange={e => setCohortForm({ ...cohortForm, name: e.target.value })} placeholder="例：2026届团委学生会" className="org-governance-field w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-purple-500" />
-            <input value={cohortForm.semesters} onChange={e => setCohortForm({ ...cohortForm, semesters: e.target.value })} placeholder="包含绩效学期，可用空格或逗号分隔" className="org-governance-field w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-purple-500" />
+            <input value={cohortForm.semesters} onChange={e => setCohortForm({ ...cohortForm, semesters: e.target.value })} placeholder="绩效学期，多个学期用逗号分隔" className="org-governance-field w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-purple-500" />
             <select value={cohortForm.status} onChange={e => setCohortForm({ ...cohortForm, status: e.target.value })} className="org-governance-field w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white focus:outline-none focus:border-purple-500">
               <option value="active">当前届</option>
               <option value="draft">草稿届次</option>
@@ -708,6 +743,8 @@ export const OrganizationFrameworkPanel = ({ token }) => {
               <p className="text-xs text-purple-200/60">Member Assignment</p>
               <h3 className="mt-1 text-xl font-black text-white">成员身份与分管部门</h3>
               <p className="mt-1 text-xs text-purple-100/50">当前届次：{selectedCohort?.name || '未选择'}</p>
+              {reviewWindow && <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-purple-100"><span>{reviewWindow.currentSemester} · 学期末评价{reviewWindow.open ? '已开放' : '未开放'}</span><button type="button" onClick={handleReviewWindow} disabled={busy} className="rounded-lg bg-blue-600/30 px-2 py-1 text-blue-100 disabled:opacity-50">{reviewWindow.open ? '关闭评价' : '开启评价'}</button></div>}
+              {(selectedCohort?.semesters || []).map(semester => <div key={semester} className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-purple-100"><span>{semester} · 已归档 {performanceMembers.filter(member => member.semesterPerformanceArchives?.some(item => item.semester === semester)).length}/{performanceMembers.length} 人</span><button type="button" onClick={() => handleArchivePerformanceSemester(semester)} disabled={busy || isArchivedCohort} className="rounded-lg bg-purple-600/30 px-2 py-1 text-purple-100 disabled:opacity-50">归档本学期</button></div>)}
               {isArchivedCohort && <p className="mt-2 inline-flex rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">历史档案只读，不能继续编辑成员</p>}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -865,7 +902,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
                                         <div className="text-[10px] opacity-70">{member.studentId}</div>
                                       </div>
                                       {canShowPerformance ? (
-                                        <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-100">{member.performanceSnapshot?.source === 'none' ? (member.performanceSnapshot?.monthlyScores?.length ? '待完成' : '暂无成绩') : `${member.performanceSnapshot?.source === 'monthly' ? '月均' : '绩效'} ${Number(member.performanceSnapshot?.total || 0).toFixed(1)}`}</span>
+                                        <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-100">{member.performanceSnapshot?.total == null ? '待完成' : `${member.performanceSnapshot?.source === 'monthly' ? '旧月均' : '绩效'} ${Number(member.performanceSnapshot.total).toFixed(1)}`}</span>
                                       ) : (
                                         <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold opacity-70">无绩效</span>
                                       )}

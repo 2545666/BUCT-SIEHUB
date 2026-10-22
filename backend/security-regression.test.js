@@ -23,6 +23,7 @@ const performanceReads = (t, records = []) => {
   t.mock.method(models.PerformanceRecord, 'find', () => query(records));
   t.mock.method(models.PerformanceCalibration, 'find', () => query([]));
   t.mock.method(models.DepartmentPerformancePolicy, 'findOne', () => query(null));
+  t.mock.method(models.PerformanceEvaluation, 'find', () => query([]));
 };
 
 test('password recovery cannot reach ultimate, peers, or a different managed department', () => {
@@ -290,6 +291,7 @@ test('old performance entry rejects negative scores, unknown dimensions, and mis
   t.mock.method(models.User, 'find', () => query([volunteer]));
   t.mock.method(models.SystemConfig, 'findOne', async () => ({ value: '2026' }));
   t.mock.method(models.SemesterMember, 'exists', async () => false);
+  t.mock.method(models.CohortMembership, 'exists', async () => false);
   const body = { volunteerIds: [volunteer._id], dimension: 'attendance', score: -1, reason: 'Test' };
   await assert.rejects(helpers.createPerformanceRecords(leader, body), /正加分/);
   await assert.rejects(helpers.createPerformanceRecords(leader, { ...body, score: 1, dimension: 'invented' }), /维度无效/);
@@ -305,7 +307,7 @@ test('an archived cohort retry performs no user writes, freezes no new snapshots
   assert.equal(result.archivedMembers, 4); assert.equal(userWrite.mock.callCount(), 0);
 });
 
-test('cohort snapshots average completed monthly results and retain incomplete months, evaluations and old records', async t => {
+test('new cohort snapshots preserve old monthly history without using it as an official semester score', async t => {
   performanceReads(t, [{ volunteer: volunteer._id, dimension: 'attendance', score: 8, semester: '2026-2027学年 第一学期' }]);
   const standard = { weight: { leader: 70, self: 30 }, dims: [{ name: '考勤', max: 60 }, { name: '贡献', max: 40 }] };
   const scores = [
@@ -319,14 +321,79 @@ test('cohort snapshots average completed monthly results and retain incomplete m
   });
   t.mock.method(models.PerformanceEvaluation, 'find', () => query([{ semester: '2026-10', kind: 'volunteer_peer', score: 88, comment: '配合顺畅' }]));
   const snapshot = await helpers.buildPerformanceSnapshot(volunteer._id, ['2026-2027学年 第一学期'], rights);
-  assert.equal(snapshot.source, 'monthly');
-  assert.equal(snapshot.total, 89);
+  assert.equal(snapshot.source, 'semester');
+  assert.equal(snapshot.total, null);
   assert.equal(snapshot.monthlyScores.length, 3);
   assert.equal(snapshot.monthlyScores[2].combinedScore, null);
-  assert.equal(snapshot.byDimension.考勤, 57);
+  assert.deepEqual(snapshot.byDimension, {});
   assert.equal(snapshot.records.length, 1);
   assert.equal(snapshot.legacySnapshot.total, 8);
   assert.equal(snapshot.evaluations[0].score, 88);
+});
+
+test('semester scores take precedence over preserved monthly history and average across the cohort year', async t => {
+  performanceReads(t);
+  t.mock.method(models.DepartmentMonthlyScore, 'find', () => query([{ _id: 'old-month', target: volunteer._id, month: '2026-10', leaderScore: 100, selfScore: 100, standardSnapshot: { weight: { leader: 70, self: 30 }, dims: [] } }]));
+  t.mock.method(models.PerformanceEvaluation, 'find', () => query([
+    { semester: '2026-2027学年 第一学期', kind: 'leader_volunteer', score: 90 },
+    { semester: '2026-2027学年 第一学期', kind: 'self', score: 80 },
+    { semester: '2026-2027学年 第一学期', kind: 'volunteer_peer', score: 70 },
+    { semester: '2026-2027学年 第二学期', kind: 'leader_volunteer', score: 80 },
+    { semester: '2026-2027学年 第二学期', kind: 'self', score: 90 },
+    { semester: '2026-2027学年 第二学期', kind: 'volunteer_peer', score: 90 }
+  ]));
+  const snapshot = await helpers.buildPerformanceSnapshot(volunteer._id, ['2026-2027学年 第一学期', '2026-2027学年 第二学期'], volunteer);
+  assert.equal(snapshot.source, 'semester');
+  assert.deepEqual(snapshot.semesterScores.map(item => item.total), [85, 83]);
+  assert.equal(snapshot.total, 84);
+  assert.equal(snapshot.monthlyScores[0].combinedScore, 100);
+});
+
+test('academic semester labels split by an old form are recombined before archive', () => {
+  assert.deepEqual(helpers.monthsForPerformanceSemesters(['2026-2027学年', '第一学期']), ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01']);
+});
+
+test('ultimate administrator can freeze one semester before archiving the whole cohort', async t => {
+  lockMocks(t); performanceReads(t);
+  const semester = '2026-2027学年 第一学期';
+  const cohort = { _id: 'cohort', status: 'active', semesters: [semester] };
+  const member = { _id: 'membership', user: volunteer, memberRole: 'volunteer', ...rights, semesterPerformanceArchives: [], async save() {} };
+  t.mock.method(models.Cohort, 'findById', async () => cohort);
+  t.mock.method(models.CohortMembership, 'find', () => query([member]));
+  t.mock.method(models.PerformanceEvaluation, 'find', () => query([{ kind: 'leader_volunteer', score: 90 }, { kind: 'self', score: 80 }, { kind: 'volunteer_peer', score: 70 }]));
+  t.mock.method(models.AuditLog, 'create', async () => ({}));
+  const req = request({ _id: leader._id, isUltimateAdmin: true }, {}, { id: cohort._id, semester });
+  const first = response();
+  await handler('post', '/api/ultimate/cohorts/:id/performance-semesters/:semester/archive')(req, first);
+  assert.equal(first.body.archivedMembers, 1);
+  assert.equal(member.semesterPerformanceArchives[0].total, 85);
+  assert.equal(member.semesterPerformanceArchives[0].evaluations.length, 3);
+  assert.equal(member.semesterPerformanceArchives[0].evaluations[0].evaluator, undefined);
+  const second = response();
+  await handler('post', '/api/ultimate/cohorts/:id/performance-semesters/:semester/archive')(req, second);
+  assert.equal(second.body.archivedMembers, 0);
+});
+
+test('semester reviews stay closed until the ultimate administrator opens the current term', async t => {
+  lockMocks(t);
+  let open = '';
+  const semester = '2026-2027学年 第一学期';
+  t.mock.method(models.SystemConfig, 'findOne', async filter => ({ value: filter.key === 'currentSemester' ? semester : open }));
+  t.mock.method(models.SystemConfig, 'findOneAndUpdate', async (_filter, update) => { open = update.value; return { value: open }; });
+  t.mock.method(models.AuditLog, 'create', async () => ({}));
+  const actor = { _id: leader._id, isUltimateAdmin: true };
+  const before = response();
+  await handler('get', '/api/ultimate/performance-review-window')(request(actor), before);
+  assert.equal(before.body.open, false);
+  const wrong = response();
+  await handler('put', '/api/ultimate/performance-review-window')(request(actor, { semester: 'other', open: true }), wrong);
+  assert.equal(wrong.statusCode, 400);
+  const opened = response();
+  await handler('put', '/api/ultimate/performance-review-window')(request(actor, { semester, open: true }), opened);
+  assert.equal(opened.body.open, true);
+  const after = response();
+  await handler('get', '/api/ultimate/performance-review-window')(request(actor), after);
+  assert.equal(after.body.open, true);
 });
 
 test('archiving freezes historical members and protects a newer current cohort identity', async t => {
@@ -343,7 +410,7 @@ test('archiving freezes historical members and protects a newer current cohort i
   assert.ok(member.archivedAt); assert.equal(cohort.status, 'archived'); assert.equal(updates.mock.callCount(), 0);
 });
 
-test('cohort archive freezes monthly score details before closing the cohort', async t => {
+test('cohort archive freezes old monthly history without making it the new semester grade', async t => {
   lockMocks(t); performanceReads(t);
   const cohort = { _id: 'monthly', semesters: ['2026-2027学年 第一学期'], status: 'active', async save() {} };
   const member = { _id: 'monthly-member', cohort: cohort._id, user: { ...volunteer, activeCohortId: 'new' }, memberRole: 'volunteer', positionTitle: 'volunteer', ...rights, async save() {} };
@@ -355,9 +422,9 @@ test('cohort archive freezes monthly score details before closing the cohort', a
   t.mock.method(models.PerformanceEvaluation, 'find', () => query([]));
   await helpers.archiveCohort(cohort._id, leader._id);
   assert.equal(cohort.status, 'archived');
-  assert.equal(member.performanceSnapshot.total, 84);
+  assert.equal(member.performanceSnapshot.total, null);
   assert.equal(member.performanceSnapshot.monthlyScores[0].id, 'monthly-score');
-  assert.equal(member.performanceSnapshot.dimensions[0].score, 90);
+  assert.deepEqual(member.performanceSnapshot.dimensions, []);
 });
 
 test('archive ranks only volunteers with completed scores within each department', () => {
@@ -377,7 +444,7 @@ test('archive ranks only volunteers with completed scores within each department
   assert.deepEqual(members.map(item => item.performanceSnapshot.rank), [1, undefined, undefined, 2, 1, undefined]);
 });
 
-test('ultimate organization member list shows current monthly performance and keeps archived snapshots frozen', async t => {
+test('ultimate organization member list shows pending semester performance and keeps old archived snapshots frozen', async t => {
   performanceReads(t);
   let status = 'active';
   const member = { _id: 'member', cohort: 'cohort', user: volunteer, memberRole: 'volunteer', positionTitle: 'volunteer', ...rights, performanceSnapshot: { total: 12, source: 'legacy' } };
@@ -388,7 +455,8 @@ test('ultimate organization member list shows current monthly performance and ke
   const req = request({ isUltimateAdmin: true }); req.query = { cohortId: 'cohort' };
   const live = response();
   await handler('get', '/api/ultimate/members')(req, live);
-  assert.equal(live.body.members[0].performanceSnapshot.total, 84);
+  assert.equal(live.body.members[0].performanceSnapshot.total, null);
+  assert.equal(live.body.members[0].performanceSnapshot.monthlyScores[0].combinedScore, 84);
   status = 'archived';
   const archived = response();
   await handler('get', '/api/ultimate/members')(req, archived);

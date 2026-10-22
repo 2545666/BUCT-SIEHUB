@@ -22,8 +22,9 @@ const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs');
 const { rateLimit } = require('express-rate-limit');
-const { idOf, isConsistentIdentity, serializeFeedbackForViewer, paginationOf, canResetPassword, summarizeEvaluations, calculatePerformance, safeUploadType, matchesFileSignature } = require('./security-policy');
+const { idOf, isConsistentIdentity, serializeFeedbackForViewer, paginationOf, canResetPassword, calculatePerformance, safeUploadType, matchesFileSignature } = require('./security-policy');
 const { installCulturePerformanceRoutes, CultureMonthlyScore, DepartmentMonthlyScore, serializeCultureScore } = require('./culture-performance');
+const { rubricFor, normalizeItems, scoreOf, summarizeSemester, supervisorKind, bonusItemFor } = require('./semester-performance');
 const {
   ORGANIZATIONS,
   MEMBER_ROLES,
@@ -587,6 +588,9 @@ const performanceEvaluationSchema = new mongoose.Schema({
     required: true
   },
   score: { type: Number, required: true, min: 0, max: 100 },
+  items: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  bonusScore: { type: Number, default: 0, min: 0 },
+  bonusReason: { type: String, default: '', maxlength: 500 },
   comment: { type: String, default: '', maxlength: 2000 },
   anonymous: { type: Boolean, default: true }
 }, { timestamps: true });
@@ -789,6 +793,7 @@ const cohortMembershipSchema = new mongoose.Schema({
     endDate: Date,
     performanceSnapshot: mongoose.Schema.Types.Mixed
   }],
+  semesterPerformanceArchives: { type: [mongoose.Schema.Types.Mixed], default: [] },
   performanceSnapshot: {
     total: { type: Number, default: 0 },
     byDimension: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -800,6 +805,7 @@ const cohortMembershipSchema = new mongoose.Schema({
     source: String,
     dimensions: { type: [mongoose.Schema.Types.Mixed], default: [] },
     monthlyScores: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    semesterScores: { type: [mongoose.Schema.Types.Mixed], default: [] },
     evaluations: { type: [mongoose.Schema.Types.Mixed], default: [] },
     legacySnapshot: mongoose.Schema.Types.Mixed,
     archivedAt: Date
@@ -2270,6 +2276,7 @@ const getCurrentSemesterName = async () => {
   }
   return current.value;
 };
+const isSemesterReviewOpen = async semester => (await SystemConfig.findOne({ key: 'semesterPerformanceReviewOpen' }))?.value === semester;
 
 const createChinaBoundaryDate = (year, monthIndex, day = 1) => new Date(Date.UTC(year, monthIndex, day, -8));
 
@@ -2547,6 +2554,9 @@ const serializePerformanceEvaluation = (item, viewer, target) => ({
   kind: item.kind,
   kindLabel: PERFORMANCE_EVALUATION_KINDS[item.kind]?.label || item.kind,
   score: item.score,
+  items: item.items || [],
+  bonusScore: item.bonusScore || 0,
+  bonusReason: item.bonusReason || '',
   comment: item.comment || '',
   anonymous: true,
   evaluator: (viewer?.isUltimateAdmin || idOf(viewer) === idOf(item.evaluator))
@@ -2647,7 +2657,19 @@ const ensurePerformanceRecordAccess = (user, record) => {
   );
 };
 
-const monthsForPerformanceSemesters = semesters => [...new Set(semesters.flatMap(value => {
+const normalizePerformanceSemesters = values => {
+  const result = [];
+  for (let index = 0; index < (values || []).length; index++) {
+    const value = String(sanitizeInput(values[index]) || '').trim();
+    const next = String(sanitizeInput(values[index + 1]) || '').trim();
+    if (/^\d{4}\D+\d{4}学年$/.test(value) && /^第?[一二12]学期$/.test(next)) {
+      result.push(`${value} ${next}`);
+      index++;
+    } else if (value) result.push(value);
+  }
+  return [...new Set(result)];
+};
+const monthsForPerformanceSemesters = semesters => [...new Set(normalizePerformanceSemesters(semesters).flatMap(value => {
   const name = String(value || '').trim();
   if (/^\d{4}-(0[1-9]|1[0-2])$/.test(name)) return [name];
   const match = name.match(/(\d{4})\D+(\d{4}).*?第?\s*([一二12])\s*学期/);
@@ -2661,6 +2683,7 @@ const monthsForPerformanceSemesters = semesters => [...new Set(semesters.flatMap
 }))];
 
 const buildPerformanceSnapshot = async (userId, semesters = [], assignment = {}) => {
+  semesters = normalizePerformanceSemesters(semesters);
   if (!userId || !isValidManagedDepartment(assignment)) return { total: 0, byDimension: {}, records: [], semesters, archivedAt: new Date() };
   const query = { volunteer: userId, organization: assignment.organization, department: assignment.department };
   if (semesters.length > 0) query.semester = { $in: semesters };
@@ -2671,31 +2694,26 @@ const buildPerformanceSnapshot = async (userId, semesters = [], assignment = {})
     loadPerformanceRecords(query),
     DepartmentPerformancePolicy.findOne({ organization: assignment.organization, department: assignment.department }).lean(),
     months.length ? monthlyModel.find(monthlyQuery).lean() : [],
-    months.length ? PerformanceEvaluation.find({ target: userId, organization: assignment.organization, department: assignment.department, semester: { $in: [...semesters, ...months] } }).lean() : []
+    semesters.length ? PerformanceEvaluation.find({ target: userId, organization: assignment.organization, department: assignment.department, semester: { $in: [...semesters, ...months] } }).lean() : []
   ]);
   const policy = serializeDepartmentPerformancePolicy(policyDoc, assignment.organization, assignment.department);
   const legacySnapshot = calculatePerformance(records, policy);
+  const semesterScores = semesters.map(semester => (assignment.semesterPerformanceArchives || []).find(item => item.semester === semester) || summarizeSemester(evaluationDocs.filter(item => item.semester === semester), assignment, semester));
+  const completedSemesters = semesterScores.filter(item => item.total != null);
   const monthlyScores = monthlyDocs.map(serializeCultureScore).sort((a, b) => a.month.localeCompare(b.month));
-  const completed = monthlyScores.filter(score => score.combinedScore !== null);
-  const dimensionRows = new Map();
-  for (const score of completed) for (const dimension of score.standardSnapshot?.dims || []) {
-    const entry = dimensionRows.get(dimension.name) || { name: dimension.name, score: 0, max: 0, count: 0 };
-    entry.score += Number(score.dimensionScores?.[dimension.name] || 0);
-    entry.max += Number(dimension.max || 0);
-    entry.count += 1;
-    dimensionRows.set(dimension.name, entry);
-  }
-  const monthlyDimensions = [...dimensionRows.values()].map(item => ({ name: item.name, score: Math.round(item.score / item.count * 10) / 10, max: Math.round(item.max / item.count * 10) / 10 }));
-  const hasMonthly = completed.length > 0;
-  const dimensions = hasMonthly ? monthlyDimensions : (policy.dimensions || [])
-    .filter(item => item.scoringMode !== 'bonus')
-    .map(item => ({ name: item.label, score: Number(legacySnapshot.byDimension?.[item.key] || 0), max: Number(item.maxScore || 0) }));
+  const semesterDimensions = completedSemesters.flatMap(item => item.dimensions || []).reduce((map, item) => {
+    const row = map.get(item.name) || { name: item.name, score: 0, max: 0, count: 0 };
+    row.score += item.score; row.max += item.max; row.count += 1; map.set(item.name, row);
+    return map;
+  }, new Map());
+  const hasSemester = completedSemesters.length > 0;
+  const dimensions = hasSemester ? [...semesterDimensions.values()].map(item => ({ name: item.name, score: Math.round(item.score / item.count * 10) / 10, max: Math.round(item.max / item.count * 10) / 10 })) : [];
   return {
-    total: hasMonthly ? Math.round(completed.reduce((sum, score) => sum + score.combinedScore, 0) / completed.length * 10) / 10 : legacySnapshot.total,
-    byDimension: hasMonthly ? Object.fromEntries(monthlyDimensions.map(item => [item.name, item.score])) : legacySnapshot.byDimension,
+    total: hasSemester ? Math.round(completedSemesters.reduce((sum, score) => sum + score.total, 0) / completedSemesters.length * 10) / 10 : null,
+    byDimension: Object.fromEntries(dimensions.map(item => [item.name, item.score])),
     rawByDimension: legacySnapshot.rawByDimension, records, semesters, policy,
-    source: hasMonthly ? 'monthly' : records.length ? 'legacy' : 'none', dimensions, monthlyScores,
-    evaluations: evaluationDocs.map(item => ({ month: item.semester, kind: item.kind, score: item.score, comment: item.comment, createdAt: item.createdAt })),
+    source: 'semester', dimensions, monthlyScores, semesterScores,
+    evaluations: evaluationDocs.map(item => ({ semester: item.semester, kind: item.kind, score: item.score, items: item.items || [], comment: item.comment, createdAt: item.createdAt })),
     legacySnapshot, archivedAt: new Date()
   };
 };
@@ -2706,7 +2724,7 @@ const serializeCohort = (cohort) => ({
   startDate: cohort.startDate,
   endDate: cohort.endDate,
   status: cohort.status,
-  semesters: cohort.semesters || [],
+  semesters: normalizePerformanceSemesters(cohort.semesters || []),
   archivedAt: cohort.archivedAt || null,
   createdAt: cohort.createdAt
 });
@@ -2732,6 +2750,7 @@ const serializeCohortMember = (member) => {
     departmentLabel: getDepartmentLabel(member.organization, member.department),
     managedDepartments: (member.managedDepartments || []).map(serializeManagedDepartment),
     appointmentHistory: member.appointmentHistory || [],
+    semesterPerformanceArchives: member.semesterPerformanceArchives || [],
     performanceSnapshot: member.performanceSnapshot || {},
     archivedAt: member.archivedAt || null
   };
@@ -2743,7 +2762,8 @@ const rankArchivedVolunteers = (members) => {
     const snapshot = member.performanceSnapshot || {};
     snapshot.rank = undefined;
     if (member.memberRole !== 'volunteer' || snapshot.source === 'none' ||
-      (snapshot.monthlyScores?.length && !snapshot.monthlyScores.some(score => score.combinedScore !== null && score.combinedScore !== undefined))) continue;
+      (snapshot.source === 'semester' && !snapshot.semesterScores?.some(score => score.total != null)) ||
+      (snapshot.source !== 'semester' && snapshot.monthlyScores?.length && !snapshot.monthlyScores.some(score => score.combinedScore !== null && score.combinedScore !== undefined))) continue;
     const key = `${member.organization || ''}:${member.department || ''}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(member);
@@ -3018,6 +3038,8 @@ async function createPerformanceRecords(actor, payload, assignment = null) {
   if (!Number.isFinite(score) || score <= 0) bad('请输入有效的正加分');
   const reason = sanitizeInput(payload.reason || '');
   if (!reason) bad('请填写加分事由');
+  const activityName = sanitizeInput(payload.activityName || '');
+  if (assignment && !activityName) bad('请填写活动或事项名称');
   const occurrenceDate = payload.occurrenceDate ? new Date(payload.occurrenceDate) : new Date();
   if (Number.isNaN(occurrenceDate.getTime())) bad('发生日期无效');
   const dimension = sanitizeInput(payload.dimension || '');
@@ -3031,8 +3053,9 @@ async function createPerformanceRecords(actor, payload, assignment = null) {
       if (!isValidManagedDepartment(scope) || !(actor.isUltimateAdmin || getUserManagedDepartments(actor).some(item => isSameAssignment(item, scope)))) throw Object.assign(new Error('无权录入该部门绩效'), { status: 403 });
       const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne(scope).lean(), scope.organization, scope.department);
       if (!policy.dimensions.some(item => item.key === dimension)) bad('绩效维度无效');
+      if (await CohortMembership.exists({ user: user._id, ...scope, 'semesterPerformanceArchives.semester': semester })) throw Object.assign(new Error('该成员本学期绩效已归档'), { status: 409 });
       if (!await SemesterMember.exists({ semester, volunteer: user._id, ...scope, isActive: { $ne: false } })) bad('请先将成员加入本学期绩效名单');
-      rows.push({ volunteer: user._id, recordedBy: actor._id, ...scope, semester, dimension, score, reason, occurrenceDate, activityName: sanitizeInput(payload.activityName || '') });
+      rows.push({ volunteer: user._id, recordedBy: actor._id, ...scope, semester, dimension, score, reason, occurrenceDate, activityName });
     }
     const planned = rows.map(row => ({ ...row, _id: new mongoose.Types.ObjectId() }));
     await compensate(() => PerformanceRecord.insertMany(planned), () => PerformanceRecord.deleteMany({ _id: { $in: planned.map(row => row._id) } }));
@@ -3054,15 +3077,41 @@ async function loadPerformanceRecords(query = {}) {
   return records;
 }
 
+async function archiveSemesterForMembers(members, semester, actorId) {
+  let archived = 0;
+  for (const member of members) {
+    if (!['volunteer', 'department_lead'].includes(member.memberRole) || !isValidManagedDepartment(member) || !member.user) continue;
+    if ((member.semesterPerformanceArchives || []).some(item => item.semester === semester)) continue;
+    const userId = member.user?._id || member.user;
+    const assignment = { organization: member.organization, department: member.department };
+    const evaluations = await PerformanceEvaluation.find({ target: userId, ...assignment, semester }).lean();
+    const records = member.memberRole === 'volunteer' ? await loadPerformanceRecords({ volunteer: userId, ...assignment, semester }) : [];
+    const policyDoc = await DepartmentPerformancePolicy.findOne(assignment).lean();
+    const result = summarizeSemester(evaluations, member, semester);
+    member.semesterPerformanceArchives = [...(member.semesterPerformanceArchives || []), {
+      ...result,
+      evaluations: evaluations.map(item => ({ kind: item.kind, score: item.score, items: item.items || [], bonusScore: item.bonusScore || 0, bonusReason: item.bonusReason || '', comment: item.comment || '' })),
+      activityRecords: records.map(serializeDepartmentPerformanceRecord),
+      policy: serializeDepartmentPerformancePolicy(policyDoc, assignment.organization, assignment.department),
+      archivedAt: new Date(), archivedBy: actorId
+    }];
+    await member.save();
+    archived++;
+  }
+  return archived;
+}
+
 async function archiveCohort(cohortId, actorId) {
   return withWriteLock(`cohort:${cohortId}`, async () => {
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) { const error = new Error('届次不存在'); error.status = 404; throw error; }
     if (cohort.status === 'archived') return { cohort, archivedMembers: await CohortMembership.countDocuments({ cohort: cohort._id }) };
     if (!cohort.semesters?.length) throw Object.assign(new Error('请先为届次选择绩效学期，再进行归档'), { status: 400 });
+    cohort.semesters = normalizePerformanceSemesters(cohort.semesters);
     return withWriteLocks(cohort.semesters.map(semester => `performance:${semester}`), async () => {
     cohort.status = 'archiving'; cohort.archiveStartedAt = cohort.archiveStartedAt || new Date(); await cohort.save();
     const members = await CohortMembership.find({ cohort: cohort._id }).populate('user');
+    for (const semester of cohort.semesters) await archiveSemesterForMembers(members, semester, actorId);
     for (const member of members) {
       if (!member.archivedAt) {
         if (member.user && !member.endedAt) member.accountSnapshot = buildMemberSnapshot(member.user);
@@ -4083,7 +4132,12 @@ app.delete('/api/hub/departments/:organization/:department/performance-records/:
       department: assignment.department
     });
     if (!record) return res.status(404).json({ success: false, message: '记录不存在' });
-    await withWriteLock(`performance:${record.semester}`, () => record.deleteOne());
+    const deleted = await withWriteLock(`performance:${record.semester}`, async () => {
+      if (await CohortMembership.exists({ user: record.volunteer, organization: assignment.organization, department: assignment.department, 'semesterPerformanceArchives.semester': record.semester })) return false;
+      await record.deleteOne();
+      return true;
+    });
+    if (!deleted) return res.status(409).json({ success: false, message: '该成员本学期绩效已归档' });
     await logAction(req.user._id, 'delete_department_performance_record', 'performanceRecord', req.params.id, assignment, req);
     res.json({ success: true, message: '绩效记录已撤回' });
   } catch (error) {
@@ -4094,7 +4148,8 @@ app.delete('/api/hub/departments/:organization/:department/performance-records/:
 app.get('/api/hub/departments/:organization/:department/performance-evaluations', authenticate, async (req, res) => {
   const assignment = { organization: req.params.organization, department: req.params.department };
   if (!isValidManagedDepartment(assignment)) return res.status(404).json({ success: false, message: '部门模块不存在' });
-  const semester = sanitizeInput(req.query.semester) || await getCurrentSemesterName();
+  const currentSemester = await getCurrentSemesterName();
+  const semester = sanitizeInput(req.query.semester) || currentSemester;
   const targetId = sanitizeInput(req.query.targetId);
   try {
     const targetQuery = { organization: assignment.organization, department: assignment.department, isActive: true, ...(targetId ? { _id: targetId } : {}) };
@@ -4112,13 +4167,20 @@ app.get('/api/hub/departments/:organization/:department/performance-evaluations'
     }).populate('evaluator', '-password').sort({ createdAt: -1 }).lean();
     const serialized = evaluations.map(item => serializePerformanceEvaluation(item, req.user, targetMap.get(String(item.target))));
     const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne(assignment).lean(), assignment.organization, assignment.department);
-    const summary = summarizeEvaluations(serialized, policy, PERFORMANCE_EVALUATION_KINDS);
-    const targets = targetUsers.map(target => ({
-      id: target._id, _id: target._id, name: target.name, positionTitle: target.positionTitle,
-      allowedKinds: Object.keys(PERFORMANCE_EVALUATION_KINDS).filter(kind => canSubmitPerformanceEvaluation(req.user, target, kind, assignment))
+    const summary = allowedTargets.map(target => ({ target: serializeUser(target), ...summarizeSemester(serialized.filter(item => idOf(item.target) === idOf(target)), target, semester) }));
+    const archivedTargetIds = new Set((await CohortMembership.distinct('user', { organization: assignment.organization, department: assignment.department, 'semesterPerformanceArchives.semester': semester })).map(String));
+    const activityRecords = getDepartmentPerformanceAccess(req.user, assignment) ? await loadPerformanceRecords({ ...assignment, semester }) : [];
+    const targets = targetUsers.filter(target => !archivedTargetIds.has(String(target._id))).map(target => ({
+      id: target._id, _id: target._id, name: target.name, memberRole: target.memberRole, positionTitle: target.positionTitle,
+      allowedKinds: Object.keys(PERFORMANCE_EVALUATION_KINDS).filter(kind => canSubmitPerformanceEvaluation(req.user, target, kind, assignment)),
+      rubrics: Object.fromEntries(Object.keys(PERFORMANCE_EVALUATION_KINDS).filter(kind => canSubmitPerformanceEvaluation(req.user, target, kind, assignment)).map(kind => [kind, rubricFor(kind, target, policy)])),
+      bonusItem: bonusItemFor(target, policy),
+      activity: canSubmitPerformanceEvaluation(req.user, target, 'leader_volunteer', assignment)
+        ? calculatePerformance(activityRecords.filter(record => idOf(record.volunteer) === idOf(target)), policy) : null
     })).filter(target => target.allowedKinds.length);
     const allowedKinds = Object.keys(PERFORMANCE_EVALUATION_KINDS).filter(kind => targetUsers.some(target => canSubmitPerformanceEvaluation(req.user, target, kind, assignment)));
-    res.json({ success: true, semester, weights: PERFORMANCE_EVALUATION_KINDS, evaluationWeights: policy.evaluationWeights, allowedKinds, targets, evaluations: serialized, summary });
+    const knownSemesters = await PerformanceEvaluation.distinct('semester', assignment);
+    res.json({ success: true, semester, currentSemester, reviewOpen: semester === currentSemester && await isSemesterReviewOpen(semester), semesters: [...new Set([currentSemester, semester, ...knownSemesters.filter(value => !/^\d{4}-\d{2}$/.test(value))])], weights: { supervisor: 70, self: 10, peer: 20 }, allowedKinds, targets, evaluations: serialized, summary });
   } catch (error) {
     res.status(500).json({ success: false, message: '获取评价记录失败' });
   }
@@ -4129,25 +4191,39 @@ app.post('/api/hub/departments/:organization/:department/performance-evaluations
   if (!isValidManagedDepartment(assignment)) return res.status(404).json({ success: false, message: '部门模块不存在' });
   const targetId = sanitizeInput(req.body.targetId);
   const kind = sanitizeInput(req.body.kind);
-  const score = Number(req.body.score);
   const comment = sanitizeInput(req.body.comment || '');
-  const semester = sanitizeInput(req.body.semester) || await getCurrentSemesterName();
-  if (!targetId || !PERFORMANCE_EVALUATION_KINDS[kind] || !Number.isFinite(score) || score < 0 || score > 100) {
-    return res.status(400).json({ success: false, message: '评价对象、类型或分数无效' });
+  const currentSemester = await getCurrentSemesterName();
+  const semester = sanitizeInput(req.body.semester) || currentSemester;
+  if (!targetId || !PERFORMANCE_EVALUATION_KINDS[kind] || semester !== currentSemester) {
+    return res.status(400).json({ success: false, message: '只能填写当前学期的评价' });
   }
+  if (!await isSemesterReviewOpen(semester)) return res.status(403).json({ success: false, message: '本学期末评价尚未开放' });
   try {
+    return await withWriteLock(`performance:${semester}`, async () => {
     const target = await User.findOne({ _id: targetId, organization: assignment.organization, department: assignment.department, isActive: true }).select('-password');
     if (!target) return res.status(404).json({ success: false, message: '评价对象不存在或不属于该部门' });
     if (!canSubmitPerformanceEvaluation(req.user, target, kind, assignment)) {
       return res.status(403).json({ success: false, message: '当前身份不能提交此类评价' });
     }
+    if (await CohortMembership.exists({ user: target._id, organization: assignment.organization, department: assignment.department, 'semesterPerformanceArchives.semester': semester })) {
+      return res.status(409).json({ success: false, message: '该学期绩效已归档，不能再修改' });
+    }
+    const policy = serializeDepartmentPerformancePolicy(await DepartmentPerformancePolicy.findOne(assignment).lean(), assignment.organization, assignment.department);
+    const items = normalizeItems(req.body.items, rubricFor(kind, target, policy));
+    if (!items) return res.status(400).json({ success: false, message: '请按本学期评分项目逐项填写有效分数' });
+    const score = scoreOf(items);
+    const bonusItem = kind === supervisorKind(target) ? bonusItemFor(target, policy) : null;
+    const bonusScore = bonusItem ? Number(req.body.bonusScore || 0) : 0;
+    const bonusReason = sanitizeInput(req.body.bonusReason || '');
+    if (!Number.isFinite(bonusScore) || bonusScore < 0 || (bonusItem?.maxScore != null && bonusScore > bonusItem.maxScore) || (bonusScore > 0 && !bonusReason) || bonusReason.length > 500 || comment.length > 2000) return res.status(400).json({ success: false, message: '评价意见或额外加分依据无效' });
     const evaluation = await PerformanceEvaluation.findOneAndUpdate(
       { target: target._id, evaluator: req.user._id, semester, kind },
-      { target: target._id, evaluator: req.user._id, organization: assignment.organization, department: assignment.department, semester, kind, score, comment, anonymous: true },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { target: target._id, evaluator: req.user._id, organization: assignment.organization, department: assignment.department, semester, kind, score, items, bonusScore, bonusReason, comment, anonymous: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     ).populate('evaluator', '-password');
     await logAction(req.user._id, 'upsert_performance_evaluation', 'performanceEvaluation', evaluation._id, { ...assignment, semester, targetId, kind }, req);
     res.json({ success: true, evaluation: serializePerformanceEvaluation(evaluation, req.user, target) });
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: '保存评价失败' });
   }
@@ -4364,7 +4440,7 @@ app.post('/api/ultimate/cohorts', authenticate, ultimateOnly, async (req, res) =
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       status,
-      semesters: Array.isArray(semesters) ? semesters.map(sanitizeInput).filter(Boolean) : []
+      semesters: Array.isArray(semesters) ? normalizePerformanceSemesters(semesters) : []
     });
     await logAction(req.user._id, 'create_cohort', 'cohort', cohort._id, { name }, req);
     res.status(201).json({ success: true, cohort: serializeCohort(cohort) });
@@ -4382,7 +4458,7 @@ app.patch('/api/ultimate/cohorts/:id', authenticate, ultimateOnly, async (req, r
       if (req.body.status && !['draft', 'active'].includes(req.body.status)) throw Object.assign(new Error('请使用归档接口冻结届次'), { status: 400 });
       for (const field of ['name', 'status']) if (req.body[field] !== undefined) current[field] = sanitizeInput(req.body[field]);
       for (const field of ['startDate', 'endDate']) if (req.body[field] !== undefined) current[field] = req.body[field] ? new Date(req.body[field]) : null;
-      if (Array.isArray(req.body.semesters)) current.semesters = req.body.semesters.map(sanitizeInput).filter(Boolean);
+      if (Array.isArray(req.body.semesters)) current.semesters = normalizePerformanceSemesters(req.body.semesters);
       await current.save(); return current;
     });
     await logAction(req.user._id, 'update_cohort', 'cohort', cohort._id, {}, req);
@@ -4538,6 +4614,41 @@ app.get('/api/ultimate/cohorts/:id/archive-preview', authenticate, ultimateOnly,
     console.error('生成归档预览失败:', error);
     res.status(500).json({ success: false, message: '生成归档预览失败' });
   }
+});
+
+app.get('/api/ultimate/performance-review-window', authenticate, ultimateOnly, async (_req, res) => {
+  try {
+    const currentSemester = await getCurrentSemesterName();
+    res.json({ success: true, currentSemester, open: await isSemesterReviewOpen(currentSemester) });
+  } catch { res.status(500).json({ success: false, message: '读取学期评价状态失败' }); }
+});
+
+app.put('/api/ultimate/performance-review-window', authenticate, ultimateOnly, async (req, res) => {
+  try {
+    const currentSemester = await getCurrentSemesterName();
+    if (sanitizeInput(req.body.semester) !== currentSemester) return res.status(400).json({ success: false, message: '只能调整当前学期的评价时间' });
+    const open = req.body.open === true;
+    await withWriteLock('system:performance-review', () => SystemConfig.findOneAndUpdate({ key: 'semesterPerformanceReviewOpen' }, { value: open ? currentSemester : '' }, { upsert: true }));
+    await logAction(req.user._id, open ? 'open_semester_performance_review' : 'close_semester_performance_review', 'systemConfig', null, { semester: currentSemester }, req);
+    res.json({ success: true, currentSemester, open });
+  } catch { res.status(500).json({ success: false, message: '更新学期评价状态失败' }); }
+});
+
+app.post('/api/ultimate/cohorts/:id/performance-semesters/:semester/archive', authenticate, ultimateOnly, async (req, res) => {
+  try {
+    const semester = sanitizeInput(req.params.semester);
+    const result = await withWriteLock(`cohort:${req.params.id}`, async () => {
+      const cohort = await Cohort.findById(req.params.id);
+      if (!cohort) throw Object.assign(new Error('届次不存在'), { status: 404 });
+      if (cohort.status === 'archived' || !normalizePerformanceSemesters(cohort.semesters).includes(semester)) throw Object.assign(new Error('请选择本届次尚未归档的绩效学期'), { status: 400 });
+      return withWriteLock(`performance:${semester}`, async () => {
+        const members = await CohortMembership.find({ cohort: cohort._id }).populate('user');
+        return { cohort, archivedMembers: await archiveSemesterForMembers(members, semester, req.user._id) };
+      });
+    });
+    await logAction(req.user._id, 'archive_semester_performance', 'cohort', result.cohort._id, { semester, members: result.archivedMembers }, req);
+    res.json({ success: true, semester, archivedMembers: result.archivedMembers, message: '学期绩效已归档' });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.status ? error.message : '学期绩效归档失败' }); }
 });
 
 app.post('/api/ultimate/cohorts/:id/archive', authenticate, ultimateOnly, async (req, res) => {

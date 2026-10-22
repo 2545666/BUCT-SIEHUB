@@ -250,80 +250,11 @@ const installCulturePerformanceRoutes = ({ app, authenticate, logAction, User, C
         scores: visibleScores.map(serializeCultureScore), standard: standard.configuration, standardVersion: standard.version });
     } catch (error) { fail(res, error, '加载部门考核失败'); }
   };
-  const saveStandard = async (req, res) => {
-    const scope = scopeFor(req);
-    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
-    if (!canManage(req.user, scope)) return res.status(403).json({ success: false, message: '无权修改该部门考核标准' });
-    try {
-      const month = req.body.month;
-      if (!isValidMonth(month)) throw badInput('月份格式应为 YYYY-MM');
-      const configuration = normalizeCultureStandard(req.body.standard);
-      const filter = standardFilter(scope, month);
-      const doc = await scope.Standard.findOneAndUpdate(filter, { $set: { ...filter, configuration, updatedBy: req.user._id }, $inc: { version: 1 } }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: false });
-      await logAction(req.user._id, 'update_department_monthly_standard', 'departmentMonthlyStandard', doc._id, { ...scope.assignment, month, version: doc.version }, req);
-      res.json({ success: true, standard: doc.configuration, version: doc.version });
-    } catch (error) { fail(res, error, '保存考核标准失败'); }
-  };
-  const resetStandard = async (req, res) => {
-    const scope = scopeFor(req);
-    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
-    if (!canManage(req.user, scope)) return res.status(403).json({ success: false, message: '无权修改该部门考核标准' });
-    const month = req.body.month;
-    if (!isValidMonth(month)) return res.status(400).json({ success: false, message: '月份格式应为 YYYY-MM' });
-    try {
-      await scope.Standard.deleteOne(standardFilter(scope, month));
-      const standard = await loadStandard(scope, month);
-      await logAction(req.user._id, 'reset_department_monthly_standard', 'departmentMonthlyStandard', null, { ...scope.assignment, month }, req);
-      res.json({ success: true, standard: standard.configuration, version: standard.version });
-    } catch (error) { fail(res, error, '恢复考核标准失败'); }
-  };
-  const saveScore = async (req, res) => {
-    const scope = scopeFor(req);
-    if (!scope) return res.status(404).json({ success: false, message: '部门模块不存在' });
-    if (!canEnter(req.user, scope)) return res.status(403).json({ success: false, message: '无权提交该部门考核' });
-    try {
-      const { month, targetId, mode } = req.body;
-      if (!isValidMonth(month) || !mongoose.isValidObjectId(targetId) || !['self', 'grade'].includes(mode)) throw badInput('月份、成员或评分类型无效');
-      const target = await User.findById(targetId).select('name studentId role positionTitle memberRole organization department isActive').lean();
-      if (!isDepartmentMember(target, scope.assignment)) return res.status(403).json({ success: false, message: '只能考核该部门在岗成员' });
-      if (mode === 'self' ? String(req.user._id) !== String(target._id) : !canGrade(req.user, target, scope)) return res.status(403).json({ success: false, message: mode === 'self' ? '只能提交本人的自评' : '无权为该成员评分' });
-      const standard = await loadStandard(scope, month);
-      if (mode === 'grade' && Number(req.body.standardVersion) !== standard.version) return res.status(409).json({ success: false, message: '本月考核标准已更新，请刷新后重新评分' });
-      const now = new Date();
-      let fields;
-      if (mode === 'self') {
-        fields = { selfScore: round(numberInRange(req.body.selfScore, 0, 100, '自评分')), workLogs: normalizeWorkLogs(req.body.workLogs, month), selfComment: text(req.body.comment, 2000), selfSubmittedAt: now };
-      } else {
-        const ratingDate = text(req.body.ratingDate, 10) || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(now);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(ratingDate) || Number.isNaN(new Date(`${ratingDate}T00:00:00Z`).getTime()) || new Date(`${ratingDate}T00:00:00Z`).toISOString().slice(0, 10) !== ratingDate) throw badInput('评分日期无效');
-        fields = { ...calculateCultureGrade(req.body.itemDetails, standard.configuration), leaderComment: text(req.body.comment, 2000), ratedBy: req.user._id, raterName: req.user.name, ratingDate, ratedAt: now, standardSnapshot: standard.configuration, standardVersion: standard.version };
-      }
-      let cohortId = null;
-      if (CohortMembership) {
-        const membership = await CohortMembership.findOne({ ...scope.assignment, user: target._id, archivedAt: null }).populate('cohort').sort({ createdAt: -1 }).lean();
-        if (membership?.cohort?.status === 'active') cohortId = membership.cohort._id;
-      }
-      const insertFields = { target: target._id, month, ...scope.assignment, cohort: cohortId,
-        targetSnapshot: { name: target.name, studentId: target.studentId, positionTitle: target.positionTitle } };
-      if (mode === 'self') { insertFields.standardSnapshot = standard.configuration; insertFields.standardVersion = standard.version; }
-      const filter = { target: target._id, month, ...scope.assignment };
-      const update = { $set: fields, $setOnInsert: insertFields };
-      let score;
-      try {
-        score = await scope.Score.findOneAndUpdate(filter, update, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
-      } catch (error) {
-        if (error.code !== 11000) throw error;
-        score = await scope.Score.findOneAndUpdate(filter, { $set: fields }, { new: true, runValidators: true });
-      }
-      await logAction(req.user._id, mode === 'self' ? 'submit_department_self_score' : 'submit_department_grade', 'departmentMonthlyScore', score._id, { ...scope.assignment, month, targetId }, req);
-      res.json({ success: true, score: serializeCultureScore(score) });
-    } catch (error) { fail(res, error, '保存月度考核失败'); }
-  };
   for (const route of [ROUTE, '/api/hub/departments/:organization/:department/monthly-performance']) {
     app.get(`${route}-workbench`, authenticate, workbench);
-    app.put(`${route}-standards`, authenticate, saveStandard);
-    app.put(`${route}-scores`, authenticate, saveScore);
+    app.put(`${route}-standards`, authenticate, (_req, res) => res.status(410).json({ success: false, message: '月度考核已停用，请使用学期绩效' }));
+    app.put(`${route}-scores`, authenticate, (_req, res) => res.status(410).json({ success: false, message: '月度考核已停用，请使用学期绩效' }));
   }
-  app.delete('/api/hub/departments/:organization/:department/monthly-performance-standards', authenticate, resetStandard);
+  app.delete('/api/hub/departments/:organization/:department/monthly-performance-standards', authenticate, (_req, res) => res.status(410).json({ success: false, message: '月度考核已停用，请使用学期绩效' }));
 };
 module.exports = { DEFAULT_CULTURE_STANDARD, CultureMonthlyScore, CultureMonthlyStandard, DepartmentMonthlyScore, DepartmentMonthlyStandard, standardFromPolicy, calculateCultureGrade, normalizeCultureStandard, serializeCultureScore, isValidMonth, installCulturePerformanceRoutes };
