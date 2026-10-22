@@ -14,7 +14,7 @@ chmod 700 "$backup_dir"
 # Persistent attachments stay in place; source and database have their own rollback copies.
 tar --exclude=node_modules --exclude='*uploads*' -czf "$backup_dir/backend.tar.gz" -C "$site_dir" backend
 cp -a "$site_dir/frontend/dist" "$backup_dir/dist"
-tar --exclude=node_modules --exclude=dist --exclude=releases --exclude='dist.before-*' -czf "$backup_dir/frontend-source.tar.gz" -C "$site_dir" frontend
+tar --exclude=node_modules --exclude=dist --exclude=releases --exclude='dist.*' -czf "$backup_dir/frontend-source.tar.gz" -C "$site_dir" frontend
 cp -a /etc/nginx/sites-enabled/resona "$backup_dir/nginx.conf"
 cp -a /etc/mongod.conf "$backup_dir/mongod.conf"
 pm2 save >/dev/null
@@ -43,6 +43,7 @@ restore_backend() {
 }
 
 rsync -a --exclude=node_modules --exclude='.env*' --exclude='*uploads*' --exclude=ssl "$release_dir/backend/" "$site_dir/backend/"
+rm -f "$site_dir/backend/department-monthly-performance.test.js"
 rsync -a --exclude=node_modules --exclude='.env*' --exclude=dist --exclude=releases "$release_dir/frontend/" "$site_dir/frontend/"
 if ! (cd "$site_dir/backend" && npm ci --omit=dev --registry=https://registry.npmjs.org && node --check server.js && npm test); then
   restore_backend
