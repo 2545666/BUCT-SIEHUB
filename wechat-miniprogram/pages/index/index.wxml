@@ -50,6 +50,7 @@
             <text class="lead-notice-title">{{homeLeadNotice.displayTitle || homeLeadNotice.title}}</text>
             <text class="lead-notice-text">{{homeLeadNotice.displaySummary || '暂无摘要'}}</text>
             <text class="lead-notice-time">{{homeLeadNotice.displayTime}}</text>
+            <button class="notice-open" data-index="0" bindtap="openNotice">阅读全文</button>
           </view>
         </view>
         <view class="notice-list">
@@ -60,6 +61,7 @@
             </view>
             <text class="notice-sub">{{item.organizationLabel}} · {{item.departmentLabel}}</text>
             <text class="notice-content">{{item.displaySummary || '暂无摘要'}}</text>
+            <button class="notice-open" data-index="{{index}}" bindtap="openNotice">阅读全文</button>
           </view>
         </view>
       </block>
@@ -227,6 +229,14 @@
         <text class="feedback-time">{{item.createdAt}}</text>
       </view>
     </block>
+  </view>
+
+  <view wx:if="{{tab === 'notice' && selectedNotice}}" class="panel notice-detail">
+    <button class="small-button" data-tab="home" bindtap="switchTab">返回消息列表</button>
+    <text class="panel-title">{{selectedNotice.displayTitle}}</text>
+    <text class="notice-sub">{{selectedNotice.displayDepartment}} · {{selectedNotice.displayTime}}</text>
+    <rich-text nodes="{{selectedNotice.displayBody}}" />
+    <button wx:if="{{selectedNotice.sourceUrl}}" class="notice-open" bindtap="copyNoticeSource">复制原文链接</button>
   </view>
 
   <view class="bottom-dock">

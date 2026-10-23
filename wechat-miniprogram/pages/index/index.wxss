@@ -818,3 +818,7 @@ button {
   color: #fff;
   background: #0d66e8;
 }
+
+.notice-open { margin-top: 16rpx; min-height: 88rpx; font-size: 28rpx; color: #173b64; background: #edf4ff; }
+.notice-detail .panel-title { display: block; margin: 32rpx 0 16rpx; }
+.notice-detail rich-text { display: block; margin-top: 32rpx; font-size: 30rpx; line-height: 1.8; }

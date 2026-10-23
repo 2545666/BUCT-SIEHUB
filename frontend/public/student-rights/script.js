@@ -18,7 +18,7 @@ document.querySelectorAll('.case-row').forEach((row) => row.addEventListener('cl
   if (!item) return;
   document.querySelectorAll('.case-row').forEach((node) => node.classList.remove('selected'));
   row.classList.add('selected');
-  document.querySelector('.desk-detail small').textContent = `CASE DETAIL / ${row.querySelector('.case-index').textContent}`;
+  document.querySelector('.desk-detail small').textContent = `示例事项 / ${row.querySelector('.case-index').textContent}`;
   document.querySelector('.detail-status').textContent = item.status;
   document.querySelector('#case-title').textContent = item.title;
   document.querySelector('#case-copy').textContent = item.copy;
@@ -139,31 +139,23 @@ const activityPhotoSets = [
     { src: 'assets/activities/image5.png', label: '班级风采展示', caption: '班级风采展示成果画面' }
   ],
   [
-    { src: 'assets/activities/image6.png', label: '宿舍风采展示', caption: '宿舍风采展示活动记录' }
   ],
   [
     { src: 'assets/activities/image7.png', label: '教师节暖心活动', caption: '教师节暖心活动现场' },
-    { src: 'assets/activities/image8.png', label: '教师节暖心活动', caption: '教师节暖心活动祝福记录' },
     { src: 'assets/activities/image9.png', label: '教师节暖心活动', caption: '教师节暖心活动互动瞬间' },
     { src: 'assets/activities/image10.jpeg', label: '教师节暖心活动', caption: '教师节暖心活动合影记录' }
   ],
   [
-    { src: 'assets/activities/image11.png', label: '师生下午茶', caption: '师生下午茶交流现场' },
     { src: 'assets/activities/image12.png', label: '师生下午茶', caption: '师生下午茶活动记录' },
     { src: 'assets/activities/image13.jpeg', label: '师生下午茶', caption: '师生下午茶互动瞬间' },
     { src: 'assets/activities/image14.png', label: '师生下午茶', caption: '师生下午茶现场合影' }
   ],
   [
-    { src: 'assets/activities/image15.png', label: '正念冥想活动', caption: '正念冥想活动现场' },
     { src: 'assets/activities/image16.png', label: '正念冥想活动', caption: '静心疗愈体验记录' },
-    { src: 'assets/activities/image17.png', label: '正念冥想活动', caption: '正念冥想活动互动瞬间' },
-    { src: 'assets/activities/image18.png', label: '正念冥想活动', caption: '向阳纾压活动记录' }
   ],
   [
-    { src: 'assets/activities/image19.png', label: '情绪拼贴画活动', caption: '情绪拼贴画活动现场' },
     { src: 'assets/activities/image20.png', label: '情绪拼贴画活动', caption: '剪贴情绪活动记录' },
     { src: 'assets/activities/image21.png', label: '情绪拼贴画活动', caption: '拼出心声作品展示' },
-    { src: 'assets/activities/image22.png', label: '情绪拼贴画活动', caption: '情绪拼贴画互动瞬间' }
   ],
   [
     { src: 'assets/activities/image23.jpeg', label: '525百花心晴集市', caption: '525百花心晴集市现场' },
@@ -205,7 +197,7 @@ const placeholderImage = (item, eventIndex, photoIndex) => {
     '<text x="94" y="150" fill="#f2d27a" font-family="Georgia, serif" font-size="42" font-weight="700">' + pad(eventIndex + 1) + ' / ' + escapeSvg(item.category) + '</text>',
     '<text x="94" y="402" fill="#f8faf7" font-family="Georgia, serif" font-size="82" font-weight="700">' + escapeSvg(item.title) + '</text>',
     '<text x="94" y="496" fill="#f8faf7" font-family="Verdana, sans-serif" font-size="28" opacity=".72">Placeholder photo ' + photoNumber + ' of ' + total + '</text>',
-    '<text x="94" y="574" fill="#d5a542" font-family="Verdana, sans-serif" font-size="22" opacity=".76">Upload multiple photos locally, then preview inside this activity.</text>',
+    '<text x="94" y="574" fill="#d5a542" font-family="Verdana, sans-serif" font-size="22" opacity=".76">活动介绍请见下方正文</text>',
     '<text x="1038" y="682" fill="#ffffff" font-family="Georgia, serif" font-size="72" font-weight="700" opacity=".2">SIEVOX</text>',
     '</svg>'
   ].join('');
@@ -216,8 +208,8 @@ const placeholderPhoto = (eventIndex, photoIndex) => {
   const item = showcaseItems[eventIndex] || {};
   return {
     src: placeholderImage(item, eventIndex, photoIndex),
-    label: 'Placeholder ' + pad(photoIndex + 1),
-    caption: (item.caption || 'Activity photo') + ' ? Placeholder ' + pad(photoIndex + 1)
+    label: '暂无活动照片',
+    caption: item.title || '活动介绍'
   };
 };
 

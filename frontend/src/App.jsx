@@ -1,5 +1,4 @@
-import AdminDashboard, { OrganizationFrameworkPanel } from './AdminDashboard';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, Bell, BookOpen, Check, ChevronRight,
@@ -11,9 +10,9 @@ import {
   Building2, ChevronLeft, FileText, Flag, HeartHandshake, Megaphone,
   Network, Paintbrush, Scale, Trophy, UsersRound, Wrench
 } from 'lucide-react';
-import sieLogo from './assets/LOGO_1.png';
-import siehubLogo from './assets/SIEHUB_LOGO.png';
-import siebridgeLogo from './assets/SIEBridge_LOGO.png';
+const sieLogo = '/brand/sievox.png';
+const siehubLogo = '/brand/siehub.png';
+const siebridgeLogo = '/brand/siebridge.png';
 import collegeLogo from './assets/SIE_LOGO.svg';
 import buctLogo from './assets/BUCT_LOGO_blue.png';
 import beianIcon from './assets/beian.png';
@@ -26,12 +25,17 @@ import { nextTranslatedValue } from './languageState';
 import { emptyFeedbackDraft, feedbackDraftStore } from './feedbackDraft';
 import { ServiceHealthNote, formatAverageFirstResponse, usePlatformClock, useServiceMetrics } from './platformStatus';
 import { defaultSievoxPortalView, getSievoxPortalRole, resolveSievoxPortalView } from './sievoxPortal';
-import { SIEBridgeReviewWorkspace, SIEBridgeStudentPortal } from './SIEBridge';
+import useModalDialog from './useModalDialog';
 import {
   DepartmentIntroductionEditor,
   DepartmentIntroductionEntryCard,
   DepartmentIntroductionViewer
 } from './DepartmentIntroduction';
+
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const OrganizationFrameworkPanel = lazy(() => import('./AdminDashboard').then(module => ({ default: module.OrganizationFrameworkPanel })));
+const SIEBridgeReviewWorkspace = lazy(() => import('./SIEBridge').then(module => ({ default: module.SIEBridgeReviewWorkspace })));
+const SIEBridgeStudentPortal = lazy(() => import('./SIEBridge').then(module => ({ default: module.SIEBridgeStudentPortal })));
 
 export const CATEGORIES_CONFIG = {
   academic: {
@@ -1372,7 +1376,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
             <div><strong>北京化工大学</strong><span>国际教育学院</span></div>
           </div>
           <div className="login-panel-actions">
-            <button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button>
+            <button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button>
             {languageSwitcher}
           </div>
         </div>
@@ -1404,7 +1408,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
           )}
           <label className="login-field">
             <span>密码</span>
-            <div><LockKeyhole /><input type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="请输入密码" autoComplete="current-password" required /><button type="button" onClick={() => setShowPassword(v => !v)}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
+            <div><LockKeyhole /><input type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="请输入密码" autoComplete="current-password" required /><button type="button" aria-label={showPassword ? '隐藏密码' : '显示密码'} onClick={() => setShowPassword(v => !v)}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
           </label>
           {!isLogin && <label className="login-field"><span>确认密码</span><div><KeyRound /><input type="password" value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} placeholder="请再次输入密码" required /></div></label>}
           <label className="privacy-consent">
@@ -1645,16 +1649,16 @@ const createPolicyDraft = (policy = DEFAULT_VOLUNTEER_PERFORMANCE_POLICY) => ({
     rule: item.rule
   })),
   notes: policy.notes?.length ? [...policy.notes] : [...DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.notes],
-  evaluationSources: policy.evaluationSources?.length ? [...policy.evaluationSources] : ['self', 'leader'],
-  evaluationWeights: { ...(policy.evaluationWeights || { self: 30, leader: 70 }) }
+  evaluationSources: ['self', 'leader', 'peer'],
+  evaluationWeights: { self: 10, leader: 70, peer: 20 }
 });
 
 const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, saving, message, onSave, onReset }) => {
   const activePolicy = policy || DEFAULT_VOLUNTEER_PERFORMANCE_POLICY;
-  const dimensions = activePolicy.dimensions?.length ? activePolicy.dimensions : DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.dimensions;
   const notes = activePolicy.notes?.length ? activePolicy.notes : DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.notes;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => createPolicyDraft(activePolicy));
+  const dimensions = editing ? draft.dimensions : (activePolicy.dimensions?.length ? activePolicy.dimensions : DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.dimensions);
 
   useEffect(() => {
     if (!editing) setDraft(createPolicyDraft(activePolicy));
@@ -1730,9 +1734,7 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
           <textarea value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} rows={3} />
         </label>
         {module?.key !== 'student_rights' && <>
-          <label><span>评价来源（逗号分隔）</span><input value={(draft.evaluationSources || []).join(',')} onChange={event => setDraft(current => ({ ...current, evaluationSources: event.target.value.split(',').map(item => item.trim()).filter(Boolean) }))} /></label>
-          <label><span>自评权重（%）</span><input type="number" value={draft.evaluationWeights?.self ?? 30} onChange={event => setDraft(current => ({ ...current, evaluationWeights: { ...current.evaluationWeights, self: Number(event.target.value || 0) } }))} /></label>
-          <label><span>负责人权重（%）</span><input type="number" value={draft.evaluationWeights?.leader ?? 70} onChange={event => setDraft(current => ({ ...current, evaluationWeights: { ...current.evaluationWeights, leader: Number(event.target.value || 0) } }))} /></label>
+          <p className="siehub-policy-formula">学期总分统一采用：上级评分 70%＋自评 10%＋互评 20%。志愿者由负责人评分，负责人由主席团评分；下方可编辑本部门维度与给分细则。</p>
           <button type="button" className="outline-button" onClick={addDimension}>新增绩效板块</button>
         </>}
       </div>
@@ -1745,19 +1747,19 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
               <div className="siehub-policy-item-editor">
                 <label>
                   <span>维度名称</span>
-                  <input value={draft.dimensions.find(d => d.key === item.key)?.label || item.label} onChange={event => updateDraftDimension(item.key, 'label', event.target.value)} />
+                  <input value={item.label} onChange={event => updateDraftDimension(item.key, 'label', event.target.value)} />
                 </label>
                 <label>
                   <span>{item.key === 'bonus' ? '计分方式' : '封顶分'}</span>
                   <input
                     type={item.key === 'bonus' ? 'text' : 'number'}
-                    value={item.key === 'bonus' ? '附加' : (draft.dimensions.find(d => d.key === item.key)?.maxScore ?? '')}
+                    value={item.key === 'bonus' ? '附加' : (item.maxScore ?? '')}
                     disabled={item.key === 'bonus'}
                     onChange={event => updateDraftDimension(item.key, 'maxScore', event.target.value)}
                   />
                 </label>
               </div>
-              <textarea value={draft.dimensions.find(d => d.key === item.key)?.rule || item.rule} onChange={event => updateDraftDimension(item.key, 'rule', event.target.value)} rows={4} />
+              <textarea aria-label={`${item.label || '新维度'}给分细则`} value={item.rule} onChange={event => updateDraftDimension(item.key, 'rule', event.target.value)} rows={4} />
               {module?.key !== 'student_rights' && <button type="button" className="ghost" onClick={() => removeDimension(item.key)}>删除板块</button>}
             </>
           ) : (
@@ -2654,7 +2656,7 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
   return <main className="siehub-shell siehub-my-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>ACCOUNT SETTINGS</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
     </header>
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回 SIEHUB</button>
@@ -3882,33 +3884,11 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
   return <main className="siehub-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>SIE LIFE PLATFORM</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} />{user?.isUltimateAdmin && <><button className="siehub-topbar-link" type="button" onClick={onOpenUltimate}><ShieldCheck />Hero与新闻管理</button><button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button></>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} />{user?.isUltimateAdmin && <><button className="siehub-topbar-link" type="button" onClick={onOpenUltimate}><ShieldCheck />平台管理</button><button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button></>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
     </header>
     <div className="siehub-content">
-      <section className="siehub-hero">
-        <div className="siehub-hero-meta"><span>SIEHUB</span><b>{roleScope}</b></div>
-        <SIEHUBWechatNewsCarousel token={token} language={language} refreshKey={wechatNewsRefreshKey} />
-        <div className="siehub-hero-copy">
-          <div className="siehub-live-greeting">
-            <span>{clock.greeting}，{user?.name}</span>
-            <strong>{clock.timeLabel}</strong>
-            <small>{clock.dateLabel} · {clock.timezoneLabel}</small>
-            <small>{language === 'en' ? 'SIEVOX first response' : 'SIEVOX 首次响应'}：{serviceMetrics.loading && !serviceMetrics.metrics ? (language === 'en' ? 'Syncing' : '同步中') : formatAverageFirstResponse(serviceMetrics.metrics, language)}</small>
-          </div>
-        </div>
-        <WechatMpHeroEntry
-          token={token}
-          user={user}
-          language={language}
-          onWechatMpChanged={refreshWechatNews}
-          manualImportOpen={wechatManualImportOpen}
-          onOpenManualImport={openWechatManualImport}
-          onCloseManualImport={closeWechatManualImport}
-        />
-      </section>
-      <SIEHUBNoticePortal token={token} language={language} user={user} refreshKey={wechatNewsRefreshKey} />
       <section className="siehub-product-windows" aria-label="SIEHUB 平台入口">
-        <div className="siehub-group-heading"><span>ENTRY</span><div><p>PLATFORM WINDOWS</p><h2>核心平台入口</h2></div><b>{productWindows.length}</b></div>
+        <div className="siehub-group-heading"><div><h2>学生服务</h2></div></div>
         <div className="siehub-product-window-grid">
           {productWindows.map(window => (
             <button key={window.key} className={`siehub-product-window ${window.className}`} type="button" onClick={window.action}>
@@ -3924,6 +3904,26 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
           ))}
         </div>
       </section>
+      <section className="siehub-hero">
+        <div className="siehub-hero-meta"><span>SIEHUB</span><b>{roleScope}</b></div>
+        <SIEHUBWechatNewsCarousel token={token} language={language} refreshKey={wechatNewsRefreshKey} />
+        <WechatMpHeroEntry
+          token={token}
+          user={user}
+          language={language}
+          onWechatMpChanged={refreshWechatNews}
+          manualImportOpen={wechatManualImportOpen}
+          onOpenManualImport={openWechatManualImport}
+          onCloseManualImport={closeWechatManualImport}
+        />
+      </section>
+      <div className="siehub-home-status">
+        <span>{clock.greeting}，{user?.name}</span>
+        <strong>{clock.timeLabel}</strong>
+        <small>{clock.dateLabel} · {clock.timezoneLabel}</small>
+        <small>{language === 'en' ? 'SIEVOX first response' : 'SIEVOX 首次响应'}：{serviceMetrics.loading && !serviceMetrics.metrics ? (language === 'en' ? 'Syncing' : '同步中') : formatAverageFirstResponse(serviceMetrics.metrics, language)}</small>
+      </div>
+      <SIEHUBNoticePortal token={token} language={language} user={user} refreshKey={wechatNewsRefreshKey} />
       <section className="siehub-department-strip" aria-label="部门宣传入口">
         <div className="siehub-group-heading"><span>DEPT</span><div><p>SHOWCASE GATEWAY</p><h2>部门风采入口</h2></div><button className="siehub-section-link" type="button" onClick={onOpenDepartments}>全部部门 <ArrowRight /></button></div>
         {renderDepartmentStrip('团委', '01', youthLeague)}
@@ -4008,7 +4008,7 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
           返回学生服务入口
         </button>
         <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
-          <button type="button" className="is-active">我的学期成绩与评价</button>
+          <button type="button" className="is-active">我的学期评价</button>
         </div>
         <DepartmentPerformanceParticipation module={module} token={token} user={user} compact period={performancePeriod} onPeriodChange={setPerformancePeriod} />
       </>
@@ -4239,7 +4239,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
   };
 
   return <main className="siehub-shell siehub-department-shell">
-    <header className="siehub-topbar"><div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>{module?.title || '部门工作台'} / FRAMEWORK</small></div></div><div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div></header>
+    <header className="siehub-topbar"><div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>{module?.title || '部门工作台'} / FRAMEWORK</small></div></div><div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div></header>
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回模块总览</button>
       <section className="siehub-department-hero"><span className={`siehub-module-icon tone-${module?.tone || 'slate'}`}><DepartmentModuleMark module={module} /></span><div><p>SIEHUB / DEPARTMENT PLATFORM</p><h1>{module?.title}</h1><span>{module?.summary}</span></div></section>
@@ -4282,9 +4282,9 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
       ) : manageWorkspace === 'performance' ? (
         <>
           <div className="unified-performance-tabs" role="tablist" aria-label="绩效内容">
-            <button type="button" className={performanceSection === 'overview' ? 'is-active' : ''} onClick={() => setPerformanceSection('overview')}>学期成绩与评价</button>
-            <button type="button" className={performanceSection === 'legacy' ? 'is-active' : ''} onClick={() => setPerformanceSection('legacy')}>活动绩效记录</button>
-            <button type="button" className={performanceSection === 'policy' ? 'is-active' : ''} onClick={() => setPerformanceSection('policy')}>部门考核标准</button>
+            <button type="button" className={performanceSection === 'overview' ? 'is-active' : ''} onClick={() => setPerformanceSection('overview')}>学期评价</button>
+            <button type="button" className={performanceSection === 'legacy' ? 'is-active' : ''} onClick={() => setPerformanceSection('legacy')}>活动记录</button>
+            <button type="button" className={performanceSection === 'policy' ? 'is-active' : ''} onClick={() => setPerformanceSection('policy')}>部门标准</button>
           </div>
           {performanceSection === 'overview' ? <DepartmentPerformanceParticipation module={module} token={token} user={user} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
             : performanceSection === 'legacy' ? <DepartmentPerformanceWorkbench module={module} token={token} canManage={canManagePerformanceRecords} period={performancePeriod} onPeriodChange={setPerformancePeriod} />
@@ -4343,7 +4343,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
 
 const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLogout, languageSwitcher = null }) => {
   const allowed = Boolean(user?.isUltimateAdmin);
-  const [workspace, setWorkspace] = useState('news');
+  const [workspace, setWorkspace] = useState('organization');
 
   return <main className="siehub-shell siehub-ultimate-window admin-demo-shell">
     <header className="siehub-topbar">
@@ -4362,7 +4362,7 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
       </section>
       {allowed ? (
         <>
-          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={workspace === 'organization' ? 'is-active' : ''} onClick={() => setWorkspace('organization')}>组织架构</button><button type="button" className={workspace === 'news' ? 'is-active' : ''} onClick={() => setWorkspace('news')}>Hero与新闻</button></div>
+          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={workspace === 'organization' ? 'is-active' : ''} onClick={() => setWorkspace('organization')}>组织架构</button><button type="button" className={workspace === 'news' ? 'is-active' : ''} onClick={() => setWorkspace('news')}>首页与新闻</button></div>
           <section className="siehub-organization-host">{workspace === 'news' ? <HeroNewsManagement token={token} /> : <OrganizationFrameworkPanel token={token} />}</section>
         </>
       ) : (
@@ -4389,14 +4389,6 @@ const SIEBridgeWindow = ({ user, token, theme, onBack, onOpenMy, onLogout, langu
       </header>
       <div className="siehub-content">
         <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回 SIEHUB</button>
-        <section className="siehub-ultimate-hero">
-          <span className="siehub-module-icon tone-blue"><img className="siehub-module-logo" src={siebridgeLogo} alt="SIEBridge" /></span>
-          <div>
-            <p>SIEHUB / SIEBRIDGE</p>
-            <h1>SIEBridge 课程资源共享平台</h1>
-            <span>面向学生开放课程资料检索、上传与审核进度查询，审核后的资源会在这里集中展示。</span>
-          </div>
-        </section>
         {canReview && (
           <div className="siehub-portal-switch siebridge-mode-switch" aria-label="SIEBridge 工作区切换">
             <button type="button" className={workspace === 'student' ? 'is-active' : ''} onClick={() => setWorkspace('student')}>学生端</button>
@@ -4454,7 +4446,7 @@ const Topbar = ({ pageTitle, theme, notifications, unreadCount = 0, onToggleNoti
         <RoleTag user={user} />
       </div>
       <ThemeModeButtons theme={theme} compact />
-      <button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button>
+      <button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button>
       {showNotifications && <button className="icon-button" type="button" title="消息通知" onClick={onToggleNotifications}><Bell />{unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>}
       {languageSwitcher}
     </div>
@@ -4582,6 +4574,7 @@ const ActiveCase = ({ feedback, onOpen }) => {
 };
 
 const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit, loading, draft, setDraft, onSaveDraft, draftMessage }) => {
+  const dialogRef = useModalDialog(open);
   const { subCategory, files } = draft;
   const form = draft;
   const setForm = next => setDraft(current => ({ ...current, ...next }));
@@ -4602,34 +4595,33 @@ const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit,
 
   if (mobile) {
     return (
-      <section className={cls('mobile-sheet', open && 'is-open')} aria-hidden={!open}>
+      <dialog ref={dialogRef} className={cls('mobile-sheet', open && 'is-open')} aria-labelledby="mobile-compose-title" onCancel={event => { event.preventDefault(); onClose(); }}>
         <div className="sheet-handle"></div>
-        <header><div><span>STEP 1 OF 3</span><h2>告诉我们发生了什么</h2></div><button className="icon-button" type="button" onClick={onClose}><X /></button></header>
+        <header><h2 id="mobile-compose-title">填写反馈</h2><button className="icon-button" type="button" aria-label="关闭反馈表单" onClick={onClose}><X /></button></header>
         <div className="sheet-body">
-          <label>问题领域</label>
-          <select className="mobile-select" value={activeCategory} onChange={e => setCategory(e.target.value)}><option value="">请选择问题领域</option>{Object.entries(CATEGORIES_CONFIG).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}</select>
-          <label>细分类别</label>
-          <select value={subCategory} onChange={e => setSubCategory(e.target.value)}><option value="">请选择细分类别</option>{catMeta?.sub.map(item => <option key={item}>{item}</option>)}</select>
-          <label>问题标题</label><input maxLength="50" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="用一句话概括问题" />
-          <label>详细描述</label><textarea maxLength="500" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="时间、地点、具体情况…" />
+          <label htmlFor="mobile-feedback-category">问题领域</label>
+          <select id="mobile-feedback-category" className="mobile-select" value={activeCategory} onChange={e => setCategory(e.target.value)}><option value="">请选择问题领域</option>{Object.entries(CATEGORIES_CONFIG).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}</select>
+          <label htmlFor="mobile-feedback-subcategory">细分类别</label>
+          <select id="mobile-feedback-subcategory" value={subCategory} onChange={e => setSubCategory(e.target.value)}><option value="">请选择细分类别</option>{catMeta?.sub.map(item => <option key={item}>{item}</option>)}</select>
+          <label htmlFor="mobile-feedback-title">问题标题</label><input id="mobile-feedback-title" maxLength="50" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="用一句话概括问题" />
+          <label htmlFor="mobile-feedback-content">详细描述</label><textarea id="mobile-feedback-content" maxLength="500" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="时间、地点、具体情况…" />
           {files.length > 0 && <p>已选择 {files.length} 个附件</p>}
           {draftMessage && <p role="status">{draftMessage}</p>}
           <button className="text-button" type="button" onClick={onSaveDraft} disabled={loading}>暂存草稿（含附件）</button>
           <div className="sheet-actions">
-            <label className="sheet-attach"><Paperclip /><input hidden type="file" multiple onChange={e => setFiles(Array.from(e.target.files || []))} /></label>
+            <label className="sheet-attach"><Paperclip /><span>添加附件</span><input aria-label="添加反馈附件" type="file" multiple onChange={e => setFiles(Array.from(e.target.files || []))} /></label>
             <label className="mobile-anonymous"><input type="checkbox" checked={form.isAnonymous} onChange={e => setForm({ ...form, isAnonymous: e.target.checked })} /><i></i><span>匿名</span></label>
             <button className="sheet-next" type="button" onClick={submit} disabled={loading}>{loading ? '提交中' : '提交反馈'}<ArrowRight /></button>
           </div>
         </div>
-      </section>
+      </dialog>
     );
   }
 
   return (
-    <aside className={cls('compose-drawer', open && 'is-open')} aria-hidden={!open} aria-label="发起反馈">
-      <header><div><span>NEW FEEDBACK</span><h2>发起反馈</h2></div><button className="icon-button" type="button" onClick={onClose}><X /></button></header>
+    <dialog ref={dialogRef} className={cls('compose-drawer', open && 'is-open')} aria-labelledby="desktop-compose-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+      <header><h2 id="desktop-compose-title">发起反馈</h2><button className="icon-button" type="button" aria-label="关闭反馈表单" onClick={onClose}><X /></button></header>
       <div className="compose-body">
-        <div className="step-indicator"><span className="is-active">1</span><i></i><span>2</span><i></i><span>3</span><small>描述问题</small><small>补充信息</small><small>确认提交</small></div>
         <label className="field-label">问题领域</label>
         <div className="compose-categories">
           {Object.entries(CATEGORIES_CONFIG).map(([key, cat]) => <button key={key} className={activeCategory === key ? 'is-active' : ''} type="button" onClick={() => setCategory(key)}>{cat.label}</button>)}
@@ -4637,7 +4629,7 @@ const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit,
         <label className="input-field"><span>细分类别</span><select value={subCategory} onChange={e => setSubCategory(e.target.value)}><option value="">请选择详细诉求分类</option>{catMeta?.sub.map(item => <option key={item}>{item}</option>)}</select></label>
         <label className="input-field"><span>问题标题</span><input maxLength="50" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="用一句话概括你遇到的问题" /><small>{form.title.length} / 50</small></label>
         <label className="input-field textarea-field"><span>详细描述</span><textarea maxLength="500" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="请描述时间、地点、具体情况，以及你希望得到的帮助…" /><small>{form.content.length} / 500</small></label>
-        <label className="upload-area"><ImagePlus /><div><strong>{files.length ? `已选择 ${files.length} 个文件` : '添加图片或视频'}</strong><p>最多 10 个文件，单个不超过 20MB</p></div><span className="outline-button">选择文件</span><input hidden type="file" multiple onChange={e => setFiles(Array.from(e.target.files || []))} /></label>
+        <label className="upload-area"><ImagePlus /><div><strong>{files.length ? `已选择 ${files.length} 个文件` : '添加图片或视频'}</strong><p>最多 10 个文件，单个不超过 20MB</p></div><span className="outline-button">选择文件</span><input aria-label="添加反馈附件" type="file" multiple onChange={e => setFiles(Array.from(e.target.files || []))} /></label>
         <div className="compose-options">
           <div><span>优先级</span><div className="priority-switch">{['normal', 'high', 'urgent'].map(key => <button key={key} className={form.priority === key ? 'is-active' : ''} type="button" onClick={() => setForm({ ...form, priority: key })}>{PRIORITY_LABEL[key]}</button>)}</div></div>
           <label><span><strong>匿名提交</strong><small>处理部门不可见你的身份</small></span><input className="switch-input" type="checkbox" checked={form.isAnonymous} onChange={e => setForm({ ...form, isAnonymous: e.target.checked })} /><i></i></label>
@@ -4645,11 +4637,12 @@ const ComposeDrawer = ({ open, mobile, category, setCategory, onClose, onSubmit,
       </div>
       {draftMessage && <p role="status">{draftMessage}</p>}
       <footer><button className="text-button" type="button" onClick={onSaveDraft} disabled={loading}>暂存草稿（含附件）</button><button className="primary-button" type="button" onClick={submit} disabled={loading}>确认并提交<Send /></button></footer>
-    </aside>
+    </dialog>
   );
 };
 
 const FeedbackDialog = ({ feedback, onClose, onReply, onRecall, onDelete }) => {
+  const dialogRef = useModalDialog(Boolean(feedback));
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   useEffect(() => setReply(''), [feedback?._id]);
@@ -4663,11 +4656,10 @@ const FeedbackDialog = ({ feedback, onClose, onReply, onRecall, onDelete }) => {
     finally { setSending(false); }
   };
   return (
-    <div className="dialog-backdrop">
-      <dialog className="feedback-dialog" open>
-        <button className="dialog-close icon-button" type="button" onClick={onClose}><X /></button>
+      <dialog ref={dialogRef} className="feedback-dialog" aria-labelledby="feedback-dialog-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+        <button className="dialog-close icon-button" type="button" aria-label="关闭反馈详情" onClick={onClose}><X /></button>
         <div className="dialog-status"><span className={`status ${status.className}`}><i></i>{status.label}</span><small>#{feedback._id?.slice(-6)?.toUpperCase()}</small></div>
-        <h2>{feedback.title}</h2>
+        <h2 id="feedback-dialog-title">{feedback.title}</h2>
         <p>{feedback.content}</p>
         <AttachmentViewer attachments={feedback.attachments} />
         <ol className="dialog-timeline">
@@ -4676,10 +4668,9 @@ const FeedbackDialog = ({ feedback, onClose, onReply, onRecall, onDelete }) => {
             <li className="current" key={resp._id || resp.createdAt}><MessagesSquare /><div><strong>{responseSenderLabel(resp)}</strong><small>{formatDate(resp.createdAt)}</small><p>{resp.isRecalled ? '该回复已被撤回' : resp.content}</p>{!resp.isRecalled && <AttachmentViewer attachments={resp.attachments} />}{!resp.isRecalled && resp.canRecall && <button className="text-button" type="button" onClick={() => onRecall(feedback._id, resp._id)}>撤回留言</button>}</div></li>
           ))}
         </ol>
-        <div className="dialog-reply"><input value={reply} onChange={e => setReply(e.target.value)} placeholder="补充信息或回复处理老师…" /><button type="button" disabled={sending} onClick={submitReply}><Send /><span>{sending ? '发送中' : '发送'}</span></button></div>
+        <div className="dialog-reply"><label htmlFor="student-feedback-reply">补充信息或回复</label><textarea id="student-feedback-reply" rows={3} value={reply} onChange={e => setReply(e.target.value)} placeholder="继续补充说明，或回复处理人员…" /><button type="button" disabled={sending || !reply.trim()} onClick={submitReply}><Send /><span>{sending ? '发送中' : '发送'}</span></button></div>
         {feedback.status === 'pending' && <button className="text-button danger-text" type="button" onClick={() => onDelete(feedback._id)}>撤销这条反馈</button>}
       </dialog>
-    </div>
   );
 };
 
@@ -4726,14 +4717,14 @@ const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, ope
   );
 };
 
-const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpenFeedback, onOpenManage, theme, clock, unreadCount = 0, onToggleNotifications, showNotifications = true, languageSwitcher = null, pagination, onPageChange, filter, onFilterChange, search, onSearchChange, listLoading }) => {
+const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpenFeedback, onOpenManage, onBackToHub, theme, clock, unreadCount = 0, onToggleNotifications, showNotifications = true, languageSwitcher = null, pagination, onPageChange, filter, onFilterChange, search, onSearchChange, listLoading }) => {
   const latest = feedbacks.find(item => item.status === 'processing') || feedbacks[0];
   return (
     <div className="mobile-stage">
       <div className="mobile-shell">
         <header className="mobile-header">
-          <div className="mobile-brand"><img src={sieLogo} alt="SIEVOX" /><div><strong>SIEVOX</strong><span>学生权益反馈</span></div></div>
-          <div className="mobile-header-actions"><span className="mobile-role-chip"><span>{user?.name}</span><RoleTag user={user} /></span>{onOpenManage && <button className="icon-button" type="button" onClick={onOpenManage} title="反馈处理台" aria-label="反馈处理台"><LayoutDashboard /></button>}<button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)}><Palette /></button>{showNotifications && <button className="icon-button" type="button" onClick={onToggleNotifications} title="消息通知"><Bell />{unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>}{languageSwitcher}</div>
+          <button className="mobile-hub-return" type="button" onClick={onBackToHub} aria-label="返回 SIEHUB 主平台"><ArrowLeft /><span>SIEHUB</span></button>
+          <div className="mobile-header-actions"><span className="mobile-role-chip"><span>{user?.name}</span><RoleTag user={user} /></span>{onOpenManage && <button className="icon-button" type="button" onClick={onOpenManage} title="反馈处理台" aria-label="反馈处理台"><LayoutDashboard /></button>}<button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button>{showNotifications && <button className="icon-button" type="button" onClick={onToggleNotifications} title="消息通知"><Bell />{unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>}{languageSwitcher}</div>
         </header>
         <main className="mobile-main">
           <section className={cls('mobile-page', page === 'home' && 'is-active')}>
@@ -4764,7 +4755,7 @@ const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpe
         <nav className="mobile-tabbar" aria-label="手机端导航">
           <button className={page === 'home' ? 'is-active' : ''} type="button" onClick={() => setPage('home')}><House /><span>首页</span></button>
           <button className={page === 'feedbacks' ? 'is-active' : ''} type="button" onClick={() => setPage('feedbacks')}><MessagesSquare /><span>反馈</span></button>
-          <button className="mobile-compose" type="button" onClick={() => openCompose('', true)}><Plus /></button>
+          <button className="mobile-compose" type="button" aria-label="发起反馈" onClick={() => openCompose('', true)}><Plus /></button>
           <button className={page === 'guide' ? 'is-active' : ''} type="button" onClick={() => setPage('guide')}><BookOpen /><span>指南</span></button>
         </nav>
       </div>
@@ -4992,8 +4983,7 @@ const DashboardPage = ({ user, token, onLogout, onRefreshUser, onOpenMy, theme, 
           <StudentDesktop {...listControls} user={user} stats={stats} feedbacks={feedbacks} activePage={activePage} setActivePage={setActivePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} onDeleteFeedback={deleteFeedback} clock={clock} />
         </main>
       </div>
-      <MobileShell {...listControls} user={user} feedbacks={feedbacks} stats={stats} page={mobilePage} setPage={setMobilePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} onOpenManage={getSievoxPortalRole(user) !== 'student' ? () => onPortalChange?.(defaultSievoxPortalView(user)) : null} theme={theme} clock={clock} unreadCount={enableNotifications ? unreadCount : 0} onToggleNotifications={() => setShowNotifications(current => !current)} showNotifications={enableNotifications} languageSwitcher={renderLanguageSwitcher?.()} />
-      <div className={cls('drawer-backdrop', (composeOpen || mobileComposeOpen) && 'is-open')} onClick={() => { setComposeOpen(false); setMobileComposeOpen(false); }}></div>
+      <MobileShell onBackToHub={onBackToHub} {...listControls} user={user} feedbacks={feedbacks} stats={stats} page={mobilePage} setPage={setMobilePage} openCompose={openCompose} onOpenFeedback={setSelectedFeedback} onOpenManage={getSievoxPortalRole(user) !== 'student' ? () => onPortalChange?.(defaultSievoxPortalView(user)) : null} theme={theme} clock={clock} unreadCount={enableNotifications ? unreadCount : 0} onToggleNotifications={() => setShowNotifications(current => !current)} showNotifications={enableNotifications} languageSwitcher={renderLanguageSwitcher?.()} />
       <ComposeDrawer {...draftControls} open={composeOpen} category={composeCategory} setCategory={setComposeCategory} onClose={() => setComposeOpen(false)} onSubmit={submitFeedback} loading={loading} />
       <ComposeDrawer {...draftControls} mobile open={mobileComposeOpen} category={composeCategory} setCategory={setComposeCategory} onClose={() => setMobileComposeOpen(false)} onSubmit={submitFeedback} loading={loading} />
       {enableNotifications && (
@@ -5150,7 +5140,7 @@ export default function App() {
 
   return (
     <>
-      {content}
+      <Suspense fallback={<div className="surface-loading" role="status">正在加载工作区…</div>}>{content}</Suspense>
       {user && <SiteLegalFooter />}
     </>
   );

@@ -1,0 +1,151 @@
+/* Shared interaction rules for the hub and its task surfaces. */
+:root { --theme-on-primary: #fff; }
+html[data-color="green"] { --theme-primary: #36762f; }
+.surface-loading { padding: 48px 24px; color: var(--ink); text-align: center; }
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 3px;
+}
+.siehub-policy-formula { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.siehub-my-hero p, .siehub-my-hero span { color: #e8f0ff; }
+.siehub-my-hero h1 { color: #fff; }
+.siehub-product-windows:first-child { margin-top: 0; margin-bottom: 28px; }
+.siehub-product-window-index, .siehub-product-window-copy small { display: none; }
+.siehub-product-window { min-height: 140px; }
+.siehub-product-window-copy strong { font-size: 22px; }
+.siehub-home-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; padding: 16px 0; color: var(--ink); }
+.siehub-home-status small { color: var(--muted); font-size: 12px; }
+.unified-performance-selectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.unified-performance-selectors label { display: grid; gap: 8px; color: var(--ink); font-size: 14px; }
+.unified-performance-selectors select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); font: inherit; }
+.organization-overview { border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.organization-overview > summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--ink); font-weight: 700; }
+.organization-overview[open] > summary { margin-bottom: 16px; }
+.organization-overview > section { margin-top: 16px; }
+.siehub-shell .siebridge-searchbar label { min-height: 48px; }
+.siehub-shell .siebridge-searchbar input { min-height: 46px; }
+.case-back-button { display: none; }
+
+/* Native modal dialogs contain focus and keep the background inert. */
+dialog.compose-drawer, dialog.mobile-sheet, dialog.feedback-dialog { border: 0; color: var(--ink); background: var(--paper); padding: 0; }
+dialog:not([open]) { display: none !important; }
+dialog.compose-drawer { inset: 0 0 0 auto; margin: 0; max-height: 100dvh; height: 100dvh; }
+dialog.compose-drawer :is(input, select, textarea) { font-size: 16px; }
+dialog.compose-drawer :is(.field-label, .input-field > span, .compose-categories button, .compose-options) { font-size: 14px; }
+dialog.compose-drawer :is(button, select, input:not([type="checkbox"])) { min-height: 44px; }
+dialog.compose-drawer .upload-area { position: relative; }
+dialog.compose-drawer .upload-area input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+dialog.compose-drawer .upload-area:focus-within { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
+dialog.mobile-sheet { inset: auto 0 0; margin: 0 auto; max-width: 100%; max-height: 92dvh; }
+dialog.feedback-dialog { inset: 0; margin: auto; padding: 28px; max-height: 90dvh; overflow: auto; }
+dialog.compose-drawer::backdrop, dialog.mobile-sheet::backdrop, dialog.feedback-dialog::backdrop { background: rgb(12 25 44 / 55%); }
+.mobile-sheet .sheet-body { overflow-y: auto; min-height: 0; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+.sheet-attach { position: relative; cursor: pointer; }
+.sheet-attach input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.sheet-attach:focus-within { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
+.feedback-dialog .dialog-reply { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.feedback-dialog .dialog-reply label { font-size: 14px; font-weight: 700; }
+.feedback-dialog .dialog-reply textarea { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; resize: vertical; }
+.feedback-dialog .dialog-reply button { width: auto; min-height: 44px; justify-self: end; padding: 0 20px; gap: 8px; }
+.feedback-dialog .dialog-reply button span { display: inline; }
+.mobile-hub-return { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px; }
+.mobile-hub-return svg { width: 20px; }
+
+@media (max-width: 1023px) {
+  body:not(.auth-active) .desktop-shell.admin-demo-shell { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; }
+  .desktop-shell.admin-demo-shell > .sidebar { display: none !important; }
+  .desktop-shell.admin-demo-shell > .desktop-main { width: 100%; min-width: 0; display: block; }
+  .admin-demo-shell .sievox-admin-mobile-nav { display: flex; gap: 8px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .admin-demo-shell .sievox-admin-mobile-nav button { flex: 0 0 auto; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font-size: 14px; }
+  .admin-demo-shell .sievox-admin-mobile-nav button.is-active { background: var(--theme-primary); color: var(--theme-on-primary); }
+  .admin-demo-shell .business-feedback-redesign .admin-workspace { grid-template-columns: minmax(0, 1fr) !important; }
+  .admin-demo-shell .admin-workspace:not(.is-detail-open) > .case-inspector,
+  .admin-demo-shell .admin-workspace.is-detail-open > .queue-panel { display: none; }
+  .admin-demo-shell .business-feedback-redesign .case-inspector { position: static; width: 100%; scroll-margin-top: 150px; }
+  .admin-demo-shell .case-back-button { display: inline-flex; width: max-content; min-height: 44px; align-items: center; padding: 8px 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 7px; font: inherit; font-size: 14px; }
+  .admin-demo-shell .case-desktop-close { display: none; }
+  .admin-demo-shell .topbar { flex-wrap: wrap; gap: 8px; }
+  .admin-demo-shell .breadcrumb { min-width: 0; white-space: nowrap; }
+  .admin-demo-shell .topbar-actions { flex-wrap: wrap; }
+  .admin-demo-shell .reply-box textarea { font-size: 16px; line-height: 1.6; min-height: 120px; }
+  .admin-demo-shell input:not([type="checkbox"]):not([type="file"]), .admin-demo-shell select { font-size: 16px; min-height: 44px; }
+}
+
+@media (max-width: 760px) {
+  .siehub-shell, .mobile-shell, .admin-demo-shell { font-size: 16px; }
+  .siehub-shell input:not([type="checkbox"]):not([type="file"]),
+  .siehub-shell select, .siehub-shell textarea,
+  .mobile-shell input, .mobile-shell select, .mobile-shell textarea,
+  .admin-demo-shell input:not([type="checkbox"]):not([type="file"]),
+  .admin-demo-shell select, .admin-demo-shell textarea,
+  dialog.mobile-sheet input, dialog.mobile-sheet select, dialog.mobile-sheet textarea,
+  .siehub-shell .siebridge-searchbar input, .siehub-shell .siebridge-searchbar select {
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 44px;
+  }
+  .siehub-shell .icon-button, .mobile-shell .icon-button, .mobile-sheet .icon-button,
+  .admin-demo-shell .icon-button { min-width: 44px; min-height: 44px; }
+  .siehub-shell :is(.primary-button, .outline-button, .siehub-back),
+  .siehub-shell .organization-framework-panel button { min-height: 44px; }
+  .siehub-login-panel .login-field input { font-size: 16px; min-height: 44px; }
+  .siehub-shell .siehub-portal-switch button, .siehub-shell .unified-performance-tabs button,
+  .siehub-shell .siehub-module-workspace-nav button, .admin-demo-shell .queue-tabs button,
+  .admin-demo-shell .case-action-grid button, .admin-demo-shell .reply-box button,
+  .mobile-shell .mobile-filter-scroll button { min-height: 44px; font-size: 14px; }
+  .admin-demo-shell .case-body, .admin-demo-shell .case-meta,
+  .admin-demo-shell .case-tr strong, .admin-demo-shell .reply-box label { font-size: 14px; line-height: 1.6; }
+  .admin-demo-shell .case-tr small, .admin-demo-shell .case-tags span,
+  .admin-demo-shell .queue-toolbar span { font-size: 12px; }
+  .admin-demo-shell .topbar { padding: 10px 14px; }
+  .admin-demo-shell .topbar-actions { gap: 6px; }
+  .admin-demo-shell .role-view { padding: 20px 12px; }
+  .admin-demo-shell .superadmin-metrics > div, .admin-demo-shell .admin-metrics > div { min-height: 76px; }
+  .siehub-shell .siehub-topbar-actions { flex-wrap: wrap; gap: 4px; }
+  .siehub-shell .siehub-topbar { gap: 8px; }
+  .siehub-shell .siehub-brand { flex: 0 1 auto; }
+  .siehub-shell .siehub-brand strong { font-size: 18px; }
+  .siehub-shell .siehub-topbar-actions .icon-button { width: 44px; height: 44px; }
+  .siehub-product-windows:first-child { margin-bottom: 22px; }
+  .siehub-shell .siehub-product-window { min-height: 108px; padding: 16px; gap: 12px; }
+  .siehub-shell .siehub-product-window-copy strong { font-size: 20px; }
+  .siehub-shell .siehub-product-window-copy em { font-size: 14px; line-height: 1.6; }
+  .siehub-shell .siehub-product-window-mark { width: 44px; height: 44px; }
+  .siehub-shell .siehub-product-window-action { min-height: 44px; font-size: 14px; }
+  .siehub-shell .siehub-department-hero { padding: 16px; gap: 12px; }
+  .siehub-shell .siehub-department-hero h1 { font-size: 26px; }
+  .siehub-shell .siehub-department-hero p { display: none; }
+  .siehub-shell .siehub-department-hero .siehub-module-icon { width: 42px; height: 42px; }
+  .siehub-shell .siehub-ultimate-hero { padding: 16px; }
+  .siehub-shell .siehub-ultimate-hero h1 { font-size: 26px; }
+  .siehub-shell .siehub-ultimate-hero p { display: none; }
+  .siehub-shell .organization-summary { padding: 16px; }
+  .siehub-shell .organization-summary h2 { font-size: 22px; }
+  .siehub-shell .organization-summary .organization-description { display: none; }
+  .siehub-shell .unified-performance-selectors { grid-template-columns: 1fr; }
+  .siehub-shell .siehub-policy-item { padding: 16px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+  .siehub-shell .unified-performance-form label { font-size: 14px; }
+  .siehub-shell .siehub-school-news-carousel button { min-width: 32px; min-height: 44px; }
+  .siehub-login-view { display: flex; flex-direction: column; }
+  .siehub-login-view .siehub-login-panel { order: -1; width: 100%; padding: 24px 20px; }
+  .siehub-login-view .siehub-login-art { min-height: 160px; padding: 24px; }
+  .siehub-login-art .art-orbit, .siehub-login-art .siehub-access-seal { display: none; }
+  dialog.mobile-sheet[open] { display: flex; visibility: visible; transform: none; }
+  dialog.mobile-sheet header { flex-shrink: 0; padding: 16px 18px; }
+  dialog.mobile-sheet .sheet-body > label { font-size: 14px; line-height: 1.5; }
+  dialog.mobile-sheet .sheet-actions { display: flex; flex-wrap: wrap; gap: 12px; padding-bottom: 4px; }
+  dialog.mobile-sheet .sheet-attach { display: inline-flex; width: auto; min-height: 44px; gap: 8px; padding: 8px; font-size: 14px; }
+  dialog.mobile-sheet .sheet-next { flex: 1 0 100%; min-height: 48px; font-size: 16px; justify-content: center; }
+  dialog.mobile-sheet .mobile-anonymous { font-size: 14px; min-height: 44px; }
+  dialog.mobile-sheet input[type="checkbox"] { min-height: 20px; width: 20px; }
+  dialog.feedback-dialog { inset: auto 0 0; width: 100%; max-width: 100%; margin: 0; padding: 24px 20px max(24px, env(safe-area-inset-bottom)); border-radius: 12px 12px 0 0; }
+  .feedback-dialog h2 { font-size: 20px; line-height: 1.5; }
+  .feedback-dialog > p, .feedback-dialog .dialog-timeline p { font-size: 16px; line-height: 1.7; }
+  .mobile-header { flex-wrap: wrap; gap: 8px; }
+  .mobile-header-actions { margin-left: auto; }
+  .mobile-role-chip { max-width: 95px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.feedback-dialog[open], dialog.compose-drawer, dialog.mobile-sheet { animation: none; transition: none; }
+}

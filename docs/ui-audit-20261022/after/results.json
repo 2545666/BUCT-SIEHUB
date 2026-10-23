@@ -1,0 +1,4185 @@
+[
+  {
+    "name": "home-320",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 320,
+    "scrollWidth": 320,
+    "scrollHeight": 2406,
+    "bodyText": "SIEHUB\n审\n学生服务\n课程资源共享\n课程资料、真题课件与学习笔记的共享、上传和审核。\n进入\n学生权益反馈\n学生诉求提交、办理进度追踪与服务响应闭环。\n进入\nSIEHUB\n关于开展本学期校园服务与学生交流活动的通知\n\nWECHAT MP\n\n关注“国教空间”\n中午好，审计示例成员\n13:28\n10月23日周五 · 北京时间\nSIEVOX 首次响应：2.5 小时\n\nSIEHUB 消息中心\n\n新闻动态 · 通知公告\n5\n全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n选择起始日期\n选择终止日期\n仅看最新\nNOTICE\n通知公告\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\nDEPT\n\nSHOWCASE GATEWAY\n\n部门风采入口\n全部部门\n01\n团委\n组织部\n宣传部\n实践部\n志愿者工作部\n02\n学生会\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n首页\n部门\n账号设置\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "",
+        "cls": "siehub-wechat-cover",
+        "w": 42,
+        "h": 42
+      },
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "w": 86,
+        "h": 34
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择起始日期",
+        "cls": "siehub-date-field",
+        "w": 86,
+        "h": 34
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择终止日期",
+        "cls": "siehub-date-field",
+        "w": 86,
+        "h": 34
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部部门",
+        "cls": "siehub-section-link",
+        "w": 84,
+        "h": 33
+      },
+      {
+        "tag": "BUTTON",
+        "text": "组织部",
+        "cls": "siehub-department-chip tone-indigo",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "宣传部",
+        "cls": "siehub-department-chip tone-orange",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "实践部",
+        "cls": "siehub-department-chip tone-green",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "志愿者工作部",
+        "cls": "siehub-department-chip tone-red",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "综合办公室",
+        "cls": "siehub-department-chip tone-slate",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "siehub-department-chip tone-blue",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "文体艺术部",
+        "cls": "siehub-department-chip tone-purple",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学术科技部",
+        "cls": "siehub-department-chip tone-teal",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "新媒体工作部",
+        "cls": "siehub-department-chip tone-pink",
+        "w": 128,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "font": "10px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "font": "11px"
+      }
+    ],
+    "unnamed": [
+      {
+        "tag": "BUTTON",
+        "text": "",
+        "cls": "siehub-wechat-cover"
+      }
+    ],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "18px",
+      "19px",
+      "20px",
+      "21px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生服务",
+      "关注“国教空间”",
+      "新闻动态 · 通知公告",
+      "通知公告",
+      "部门风采入口"
+    ],
+    "serviceTop": 131,
+    "errors": []
+  },
+  {
+    "name": "rights-showcase-320",
+    "passed": true,
+    "title": "学生权益部 | SIEHUB",
+    "viewport": 320,
+    "scrollWidth": 320,
+    "scrollHeight": 12701,
+    "bodyText": "学生权益部\n返回学生权益部\nNO. 07 / SIEVOX\n\nSTUDENT RIGHTS DEPARTMENT\n\n让每个\n问题都有\n下一步\n\n一张反馈单，一次回访，一条真正能被看见的改善路径。学生权益部把同学的日常体验，带到可以行动的地方。\n\nOpen SIEVOX\n↗\n了解我们的工作\n响应承诺\n24h\n保持联系\n100%\nREAL SYSTEM UI\nSIEVOX 学生权益工作台\n\n截图来自本地登录后的真实系统界面。\n\nLISTEN\n•\nFOLLOW UP\n•\nMAKE IT VISIBLE\n•\nLISTEN\n•\nFOLLOW UP\n01\n\nOUR METHOD\n\n把“我觉得”\n变成“我们来办”\n\n权益工作不是替同学说话，而是让同学的声音有证据、有路径、有回音。我们做记录，也做连接；做反馈，也做回访。\n\n01\n先听完整\n\n从宿舍、餐饮、教学空间到校园活动，先理解事情发生的现场，再判断问题真正需要什么。\n\nLISTEN FIRST\n02\n让进度可见\n\n通过 SIEVOX 记录反馈、分派事项、标记状态，同学不用反复询问“现在到哪一步了”。\n\nTRACK THE CHANGE\n03\n把结果带回\n\n一次处理完成之后，还要回到同学身边确认体验，把个案变成下一次提案和改善的依据。\n\nCLOSE THE LOOP\n02\n\nSIEVOX SERVICE DESK\n\n一张单据，\n六个清楚的节点\n\nSIEHUB 里的 SIEVOX 是学生权益部的工作台。反馈提交后进入统一队列，分类、协同、回访与归档都留下记录。\n\n01 / 接住声音\n提交反馈，先让问题有名字\n\n同学可以从 SIEHUB 进入 ",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "brand",
+        "w": 118,
+        "h": 42
+      },
+      {
+        "tag": "A",
+        "text": "Open SIEVOX ↗",
+        "cls": "",
+        "w": 96,
+        "h": 16
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 243,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "返回 SIEHUB",
+        "cls": "",
+        "w": 67,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 132,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 185,
+        "h": 16
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "18px",
+      "19px",
+      "23px",
+      "24px",
+      "26px",
+      "28px",
+      "30px",
+      "32px",
+      "40px",
+      "42px",
+      "56px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "让每个问题都有下一步",
+      "把“我觉得”变成“我们来办”",
+      "先听完整",
+      "让进度可见",
+      "把结果带回",
+      "一张单据，六个清楚的节点",
+      "提交反馈，先让问题有名字",
+      "权益不只在后台，也在每一次相遇里",
+      "提案大赛",
+      "心栖SIE",
+      "院周活动",
+      "把现场，接入展示台",
+      "模拟政协提案大赛",
+      "北京化工大学提案大赛",
+      "班级风采展示"
+    ],
+    "broken": [],
+    "errors": []
+  },
+  {
+    "name": "home-390",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 2182,
+    "bodyText": "SIEHUB\n审\n学生服务\n课程资源共享\n课程资料、真题课件与学习笔记的共享、上传和审核。\n进入\n学生权益反馈\n学生诉求提交、办理进度追踪与服务响应闭环。\n进入\nSIEHUB\n关于开展本学期校园服务与学生交流活动的通知\n\nWECHAT MP\n\n关注“国教空间”\n中午好，审计示例成员\n13:28\n10月23日周五 · 北京时间\nSIEVOX 首次响应：2.5 小时\n\nSIEHUB 消息中心\n\n新闻动态 · 通知公告\n5\n全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n选择起始日期\n选择终止日期\n仅看最新\nNOTICE\n通知公告\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\nDEPT\n\nSHOWCASE GATEWAY\n\n部门风采入口\n全部部门\n01\n团委\n组织部\n宣传部\n实践部\n志愿者工作部\n02\n学生会\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n首页\n部门\n账号设置\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "",
+        "cls": "siehub-wechat-cover",
+        "w": 42,
+        "h": 42
+      },
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "w": 109,
+        "h": 34
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择起始日期",
+        "cls": "siehub-date-field",
+        "w": 109,
+        "h": 34
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择终止日期",
+        "cls": "siehub-date-field",
+        "w": 109,
+        "h": 34
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部部门",
+        "cls": "siehub-section-link",
+        "w": 84,
+        "h": 33
+      },
+      {
+        "tag": "BUTTON",
+        "text": "组织部",
+        "cls": "siehub-department-chip tone-indigo",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "宣传部",
+        "cls": "siehub-department-chip tone-orange",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "实践部",
+        "cls": "siehub-department-chip tone-green",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "志愿者工作部",
+        "cls": "siehub-department-chip tone-red",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "综合办公室",
+        "cls": "siehub-department-chip tone-slate",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "siehub-department-chip tone-blue",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "文体艺术部",
+        "cls": "siehub-department-chip tone-purple",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学术科技部",
+        "cls": "siehub-department-chip tone-teal",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "新媒体工作部",
+        "cls": "siehub-department-chip tone-pink",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "font": "10px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "font": "11px"
+      }
+    ],
+    "unnamed": [
+      {
+        "tag": "BUTTON",
+        "text": "",
+        "cls": "siehub-wechat-cover"
+      }
+    ],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "18px",
+      "19px",
+      "20px",
+      "21px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生服务",
+      "关注“国教空间”",
+      "新闻动态 · 通知公告",
+      "通知公告",
+      "部门风采入口"
+    ],
+    "serviceTop": 83,
+    "errors": []
+  },
+  {
+    "name": "rights-showcase-390",
+    "passed": true,
+    "title": "学生权益部 | SIEHUB",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 12839,
+    "bodyText": "学生权益部\n返回学生权益部\nNO. 07 / SIEVOX\n\nSTUDENT RIGHTS DEPARTMENT\n\n让每个\n问题都有\n下一步\n\n一张反馈单，一次回访，一条真正能被看见的改善路径。学生权益部把同学的日常体验，带到可以行动的地方。\n\nOpen SIEVOX\n↗\n了解我们的工作\n响应承诺\n24h\n保持联系\n100%\nREAL SYSTEM UI\nSIEVOX 学生权益工作台\n\n截图来自本地登录后的真实系统界面。\n\nLISTEN\n•\nFOLLOW UP\n•\nMAKE IT VISIBLE\n•\nLISTEN\n•\nFOLLOW UP\n01\n\nOUR METHOD\n\n把“我觉得”\n变成“我们来办”\n\n权益工作不是替同学说话，而是让同学的声音有证据、有路径、有回音。我们做记录，也做连接；做反馈，也做回访。\n\n01\n先听完整\n\n从宿舍、餐饮、教学空间到校园活动，先理解事情发生的现场，再判断问题真正需要什么。\n\nLISTEN FIRST\n02\n让进度可见\n\n通过 SIEVOX 记录反馈、分派事项、标记状态，同学不用反复询问“现在到哪一步了”。\n\nTRACK THE CHANGE\n03\n把结果带回\n\n一次处理完成之后，还要回到同学身边确认体验，把个案变成下一次提案和改善的依据。\n\nCLOSE THE LOOP\n02\n\nSIEVOX SERVICE DESK\n\n一张单据，\n六个清楚的节点\n\nSIEHUB 里的 SIEVOX 是学生权益部的工作台。反馈提交后进入统一队列，分类、协同、回访与归档都留下记录。\n\n01 / 接住声音\n提交反馈，先让问题有名字\n\n同学可以从 SIEHUB 进入 ",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "brand",
+        "w": 118,
+        "h": 42
+      },
+      {
+        "tag": "A",
+        "text": "Open SIEVOX ↗",
+        "cls": "",
+        "w": 96,
+        "h": 16
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 303,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "返回 SIEHUB",
+        "cls": "",
+        "w": 67,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 132,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 185,
+        "h": 16
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "18px",
+      "19px",
+      "23px",
+      "24px",
+      "26px",
+      "28px",
+      "30px",
+      "32px",
+      "40px",
+      "42px",
+      "66.3px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "让每个问题都有下一步",
+      "把“我觉得”变成“我们来办”",
+      "先听完整",
+      "让进度可见",
+      "把结果带回",
+      "一张单据，六个清楚的节点",
+      "提交反馈，先让问题有名字",
+      "权益不只在后台，也在每一次相遇里",
+      "提案大赛",
+      "心栖SIE",
+      "院周活动",
+      "把现场，接入展示台",
+      "模拟政协提案大赛",
+      "北京化工大学提案大赛",
+      "班级风采展示"
+    ],
+    "broken": [],
+    "errors": []
+  },
+  {
+    "name": "home-768",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 768,
+    "scrollWidth": 768,
+    "scrollHeight": 2063,
+    "bodyText": "SIEHUB\nSIE LIFE PLATFORM\n审\n审计示例成员\n2026000001\n学生\n部门\n中文\nEN\n学生服务\n课程资源共享\n课程资料、真题课件与学习笔记的共享、上传和审核。\n进入\n学生权益反馈\n学生诉求提交、办理进度追踪与服务响应闭环。\n进入\nSIEHUB\n学生会 / 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n国教空间\n\nWECHAT MP\n\n关注“国教空间”\n关注公众号，查看学院资讯与学生工作动态。\n中午好，审计示例成员\n13:28\n10月23日周五 · 北京时间\nSIEVOX 首次响应：2.5 小时\n\nSIEHUB 消息中心\n\n新闻动态 · 通知公告\n5\n全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n选择起始日期\n选择终止日期\n仅看最新\nNEWS\n新闻动态\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\nNOTICE\n通知公告\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "浅色模式",
+        "cls": "is-active",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "深色模式",
+        "cls": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "外观设置",
+        "cls": "icon-button theme-trigger",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "消息通知",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "部门",
+        "cls": "siehub-topbar-link",
+        "w": 71,
+        "h": 40
+      },
+      {
+        "tag": "BUTTON",
+        "text": "账号设置",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "退出登录",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 34,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 34,
+        "h": 34
+      },
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "w": 247,
+        "h": 38
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择起始日期",
+        "cls": "siehub-date-field",
+        "w": 165,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择起始日期",
+        "cls": "",
+        "w": 163,
+        "h": 38
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择终止日期",
+        "cls": "siehub-date-field",
+        "w": 165,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择终止日期",
+        "cls": "",
+        "w": 163,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1 条推文",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部部门",
+        "cls": "siehub-section-link",
+        "w": 92,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "组织部",
+        "cls": "siehub-department-chip tone-indigo",
+        "w": 106,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "宣传部",
+        "cls": "siehub-department-chip tone-orange",
+        "w": 106,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "实践部",
+        "cls": "siehub-department-chip tone-green",
+        "w": 106,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "志愿者工作部",
+        "cls": "siehub-department-chip tone-red",
+        "w": 142,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "综合办公室",
+        "cls": "siehub-department-chip tone-slate",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "siehub-department-chip tone-blue",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "文体艺术部",
+        "cls": "siehub-department-chip tone-purple",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学术科技部",
+        "cls": "siehub-department-chip tone-teal",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "新媒体工作部",
+        "cls": "siehub-department-chip tone-pink",
+        "w": 142,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "font": "12px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择起始日期",
+        "cls": "",
+        "font": "12px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择终止日期",
+        "cls": "",
+        "font": "12px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "font": "12px"
+      }
+    ],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "20px",
+      "21px",
+      "22px",
+      "9px"
+    ],
+    "headings": [
+      "学生服务",
+      "关注“国教空间”",
+      "新闻动态 · 通知公告",
+      "新闻动态",
+      "通知公告",
+      "部门风采入口"
+    ],
+    "serviceTop": 114,
+    "errors": []
+  },
+  {
+    "name": "rights-showcase-768",
+    "passed": true,
+    "title": "学生权益部 | SIEHUB",
+    "viewport": 768,
+    "scrollWidth": 768,
+    "scrollHeight": 10062,
+    "bodyText": "学生权益部\n返回学生权益部\nNO. 07 / SIEVOX\n\nSTUDENT RIGHTS DEPARTMENT\n\n让每个\n问题都有\n下一步\n\n一张反馈单，一次回访，一条真正能被看见的改善路径。学生权益部把同学的日常体验，带到可以行动的地方。\n\nOpen SIEVOX\n↗\n了解我们的工作\n响应承诺\n24h\n保持联系\n100%\nREAL SYSTEM UI\nSIEVOX 学生权益工作台\n\n截图来自本地登录后的真实系统界面。\n\nLISTEN\n•\nFOLLOW UP\n•\nMAKE IT VISIBLE\n•\nLISTEN\n•\nFOLLOW UP\n01\n\nOUR METHOD\n\n把“我觉得”\n变成“我们来办”\n\n权益工作不是替同学说话，而是让同学的声音有证据、有路径、有回音。我们做记录，也做连接；做反馈，也做回访。\n\n01\n先听完整\n\n从宿舍、餐饮、教学空间到校园活动，先理解事情发生的现场，再判断问题真正需要什么。\n\nLISTEN FIRST\n02\n让进度可见\n\n通过 SIEVOX 记录反馈、分派事项、标记状态，同学不用反复询问“现在到哪一步了”。\n\nTRACK THE CHANGE\n03\n把结果带回\n\n一次处理完成之后，还要回到同学身边确认体验，把个案变成下一次提案和改善的依据。\n\nCLOSE THE LOOP\n02\n\nSIEVOX SERVICE DESK\n\n一张单据，\n六个清楚的节点\n\nSIEHUB 里的 SIEVOX 是学生权益部的工作台。反馈提交后进入统一队列，分类、协同、回访与归档都留下记录。\n\n01\n02\n03\n04\n05\n06\n01 / 接住声音\n提交反馈，先让问题有名字",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "返回学生权益部",
+        "cls": "department-return",
+        "w": 112,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "打开导航",
+        "cls": "menu-button",
+        "w": 52,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "01",
+        "cls": "rail-current is-active",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "02",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "03",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "04",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "05",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "06",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "A",
+        "text": "Open SIEVOX ↗",
+        "cls": "",
+        "w": 96,
+        "h": 16
+      },
+      {
+        "tag": "BUTTON",
+        "text": "提交",
+        "cls": "is-active",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "编号",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "初筛",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "分派",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "处理",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "回访归档",
+        "cls": "",
+        "w": 77,
+        "h": 34
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "返回 SIEHUB",
+        "cls": "",
+        "w": 67,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 132,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 185,
+        "h": 16
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "18px",
+      "20px",
+      "24px",
+      "28px",
+      "32px",
+      "34px",
+      "42.24px",
+      "42px",
+      "43.776px",
+      "64px",
+      "66.048px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "让每个问题都有下一步",
+      "把“我觉得”变成“我们来办”",
+      "先听完整",
+      "让进度可见",
+      "把结果带回",
+      "一张单据，六个清楚的节点",
+      "提交反馈，先让问题有名字",
+      "权益不只在后台，也在每一次相遇里",
+      "提案大赛",
+      "心栖SIE",
+      "院周活动",
+      "把现场，接入展示台",
+      "模拟政协提案大赛",
+      "北京化工大学提案大赛",
+      "班级风采展示"
+    ],
+    "broken": [],
+    "errors": []
+  },
+  {
+    "name": "home-1440",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "scrollHeight": 2095,
+    "bodyText": "SIEHUB\nSIE LIFE PLATFORM\n审\n审计示例成员\n2026000001\n学生\n部门\n中文\nEN\n学生服务\n课程资源共享\n课程资料、真题课件与学习笔记的共享、上传和审核。\n进入\n学生权益反馈\n学生诉求提交、办理进度追踪与服务响应闭环。\n进入\nSIEHUB\n学生会 / 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n国教空间\n\nWECHAT MP\n\n关注“国教空间”\n关注公众号，查看学院资讯与学生工作动态。\n中午好，审计示例成员\n13:28\n10月23日周五 · 北京时间\nSIEVOX 首次响应：2.5 小时\n\nSIEHUB 消息中心\n\n新闻动态 · 通知公告\n5\n全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n选择起始日期\n选择终止日期\n仅看最新\nNEWS\n新闻动态\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n关于开展本学期校园服务与学生交流活动的通知\nNOTICE\n通知公告\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "浅色模式",
+        "cls": "is-active",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "深色模式",
+        "cls": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "外观设置",
+        "cls": "icon-button theme-trigger",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "消息通知",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "部门",
+        "cls": "siehub-topbar-link",
+        "w": 71,
+        "h": 40
+      },
+      {
+        "tag": "BUTTON",
+        "text": "账号设置",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "退出登录",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 34,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 34,
+        "h": 34
+      },
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "w": 483,
+        "h": 38
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择起始日期",
+        "cls": "siehub-date-field",
+        "w": 322,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择起始日期",
+        "cls": "",
+        "w": 320,
+        "h": 38
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择终止日期",
+        "cls": "siehub-date-field",
+        "w": 322,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择终止日期",
+        "cls": "",
+        "w": 320,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1 条推文",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5 条推文",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部部门",
+        "cls": "siehub-section-link",
+        "w": 92,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "组织部",
+        "cls": "siehub-department-chip tone-indigo",
+        "w": 106,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "宣传部",
+        "cls": "siehub-department-chip tone-orange",
+        "w": 106,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "实践部",
+        "cls": "siehub-department-chip tone-green",
+        "w": 106,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "志愿者工作部",
+        "cls": "siehub-department-chip tone-red",
+        "w": 142,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "综合办公室",
+        "cls": "siehub-department-chip tone-slate",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "siehub-department-chip tone-blue",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "文体艺术部",
+        "cls": "siehub-department-chip tone-purple",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学术科技部",
+        "cls": "siehub-department-chip tone-teal",
+        "w": 130,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "新媒体工作部",
+        "cls": "siehub-department-chip tone-pink",
+        "w": 142,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "font": "12px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择起始日期",
+        "cls": "",
+        "font": "12px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "选择终止日期",
+        "cls": "",
+        "font": "12px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "font": "12px"
+      }
+    ],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "20px",
+      "21px",
+      "22px",
+      "28px",
+      "9px"
+    ],
+    "headings": [
+      "学生服务",
+      "关注“国教空间”",
+      "新闻动态 · 通知公告",
+      "新闻动态",
+      "通知公告",
+      "部门风采入口"
+    ],
+    "serviceTop": 114,
+    "errors": []
+  },
+  {
+    "name": "rights-showcase-1440",
+    "passed": true,
+    "title": "学生权益部 | SIEHUB",
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "scrollHeight": 9611,
+    "bodyText": "学生权益部\nSIEVOX / STUDENT SERVICE DESK\n本周服务台开放中\n返回学生权益部\n服务台\n工作方法\n走进现场\n展示台\n成员\n加入我们\nNO. 07 / SIEVOX\n\nSTUDENT RIGHTS DEPARTMENT\n\n让每个\n问题都有\n下一步\n\n一张反馈单，一次回访，一条真正能被看见的改善路径。学生权益部把同学的日常体验，带到可以行动的地方。\n\nOpen SIEVOX\n↗\n了解我们的工作\n响应承诺\n24h\n保持联系\n100%\nREAL SYSTEM UI\nSIEVOX 学生权益工作台\n\n截图来自本地登录后的真实系统界面。\n\nLISTEN\n•\nFOLLOW UP\n•\nMAKE IT VISIBLE\n•\nLISTEN\n•\nFOLLOW UP\n01\n\nOUR METHOD\n\n把“我觉得”\n变成“我们来办”\n\n权益工作不是替同学说话，而是让同学的声音有证据、有路径、有回音。我们做记录，也做连接；做反馈，也做回访。\n\n01\n先听完整\n\n从宿舍、餐饮、教学空间到校园活动，先理解事情发生的现场，再判断问题真正需要什么。\n\nLISTEN FIRST\n02\n让进度可见\n\n通过 SIEVOX 记录反馈、分派事项、标记状态，同学不用反复询问“现在到哪一步了”。\n\nTRACK THE CHANGE\n03\n把结果带回\n\n一次处理完成之后，还要回到同学身边确认体验，把个案变成下一次提案和改善的依据。\n\nCLOSE THE LOOP\n02\n\nSIEVOX SERVICE DESK\n\n一张单据，\n六个清楚的节点\n\nSIEHUB 里的 SIEVOX 是学生权益部的工作台。反馈提交后进",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "返回学生权益部",
+        "cls": "department-return",
+        "w": 112,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "服务台",
+        "cls": "",
+        "w": 39,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "工作方法",
+        "cls": "",
+        "w": 52,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "走进现场",
+        "cls": "",
+        "w": 52,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "展示台",
+        "cls": "",
+        "w": 39,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "成员",
+        "cls": "",
+        "w": 26,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "加入我们",
+        "cls": "",
+        "w": 52,
+        "h": 17
+      },
+      {
+        "tag": "BUTTON",
+        "text": "01",
+        "cls": "rail-current is-active",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "02",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "03",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "04",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "05",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "BUTTON",
+        "text": "06",
+        "cls": "",
+        "w": 31,
+        "h": 31
+      },
+      {
+        "tag": "A",
+        "text": "Open SIEVOX ↗",
+        "cls": "",
+        "w": 96,
+        "h": 16
+      },
+      {
+        "tag": "BUTTON",
+        "text": "提交",
+        "cls": "is-active",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "编号",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "初筛",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "分派",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "处理",
+        "cls": "",
+        "w": 55,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "回访归档",
+        "cls": "",
+        "w": 77,
+        "h": 34
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 99,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "返回 SIEHUB",
+        "cls": "",
+        "w": 67,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 132,
+        "h": 15
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 185,
+        "h": 16
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "123.84px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "18px",
+      "20px",
+      "24px",
+      "28px",
+      "32px",
+      "34px",
+      "40px",
+      "42px",
+      "64px",
+      "78px",
+      "82px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "让每个问题都有下一步",
+      "把“我觉得”变成“我们来办”",
+      "先听完整",
+      "让进度可见",
+      "把结果带回",
+      "一张单据，六个清楚的节点",
+      "提交反馈，先让问题有名字",
+      "权益不只在后台，也在每一次相遇里",
+      "提案大赛",
+      "心栖SIE",
+      "院周活动",
+      "把现场，接入展示台",
+      "模拟政协提案大赛",
+      "北京化工大学提案大赛",
+      "班级风采展示"
+    ],
+    "broken": [],
+    "errors": []
+  },
+  {
+    "name": "manager-390",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 2939,
+    "bodyText": "国际教育学院\n›\n学生权益部处理台\n绩效考核\n📬\n🎨\n中文\nEN\n处理台\n归档\n发起反馈\n指南\n我的反馈\n绩效\n账号\n\nSIEVOX · 反馈处理\n\n学生权益部处理台\n\n学生权益部负责人 · 管理本部门反馈\n\n导出报表\n有效反馈\n28\n本职责范围\n待受理\n6\n请及时处理\n处理中\n14\n持续跟进\n已解决\n8\n累计处理完成\n待办队列\n共 28 条事项 · 按状态与优先级实时筛选\n⌕\n↺\n全部 28\n待受理 6\n处理中 14\n高优先级\n关于教学楼自习室开放时间的建议\n#DBACK0 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK1 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK2 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK3 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK4 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK5 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK6 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK7 · te",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB 模块总览",
+        "cls": "hub-inline-return",
+        "w": 89,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "hub-inline-return",
+        "w": 62,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "📬",
+        "cls": "icon-button",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "🎨",
+        "cls": "icon-button theme-trigger",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "导出报表",
+        "cls": "outline-button",
+        "w": 84,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "hover:text-purple-200 transition-colors",
+        "w": 102,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "flex items-center gap-1 hover:text-purple-200 transition-colors",
+        "w": 139,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "24px",
+      "25px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生权益部处理台",
+      "待办队列"
+    ],
+    "inputFont": "16px",
+    "errors": []
+  },
+  {
+    "name": "manager-768",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 768,
+    "scrollWidth": 768,
+    "scrollHeight": 1534,
+    "bodyText": "国际教育学院\n›\n学生权益部处理台\n返回 SIEHUB\n绩效考核\n审计示例成员\n部门负责人\n📬\n账号设置\n☀\n☾\n🎨\n中文\nEN\n处理台\n归档\n发起反馈\n指南\n我的反馈\n绩效\n账号\n\nSIEVOX · 反馈处理\n\n学生权益部处理台\n\n学生权益部负责人 · 管理本部门反馈\n\n导出报表\n有效反馈\n28\n本职责范围\n待受理\n6\n请及时处理\n处理中\n14\n持续跟进\n已解决\n8\n累计处理完成\n待办队列\n共 28 条事项 · 按状态与优先级实时筛选\n⌕\n↺\n全部 28\n待受理 6\n处理中 14\n高优先级\n事项\n提交人\n状态\n优先级\n更新时间\n关于教学楼自习室开放时间的建议\n#DBACK0 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK1 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK2 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK3 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK4 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK5 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK6 · teaching\n学生\n校内",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB",
+        "cls": "hub-inline-return",
+        "w": 118,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "hub-inline-return",
+        "w": 66,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "📬",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "账号设置",
+        "cls": "hub-inline-return sievox-account-settings",
+        "w": 66,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "☀",
+        "cls": "is-active",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "☾",
+        "cls": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "🎨",
+        "cls": "icon-button theme-trigger",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "导出报表",
+        "cls": "outline-button",
+        "w": 84,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "↺",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部 28",
+        "cls": "is-active",
+        "w": 71,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "待受理 6",
+        "cls": "",
+        "w": 75,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "处理中 14",
+        "cls": "",
+        "w": 80,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "高优先级",
+        "cls": "",
+        "w": 77,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "hover:text-purple-200 transition-colors",
+        "w": 122,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "flex items-center gap-1 hover:text-purple-200 transition-colors",
+        "w": 167,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "25px",
+      "27px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生权益部处理台",
+      "待办队列"
+    ],
+    "inputFont": "16px",
+    "errors": []
+  },
+  {
+    "name": "manager-1440",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "scrollHeight": 1415,
+    "bodyText": "SIEVOX\n学生权益反馈系统\n\n反馈工作\n\n▦\n反馈处理台\n▱\n问题归档\n\n本人服务\n\n□\n我的反馈\n＋\n发起反馈\n◇\n服务指南\n反馈通道正常\n2.5 小时\n\n本学期平均首次响应\n\n0 条已计入 / 共 0 条\n审\n审计示例成员\n学生权益部负责人 · 管理本部门反馈\n部门负责人\n国际教育学院\n›\n学生权益部处理台\n返回 SIEHUB\n绩效考核\n审计示例成员\n部门负责人\n📬\n账号设置\n☀\n☾\n🎨\n中文\nEN\n\nSIEVOX · 反馈处理\n\n学生权益部处理台\n\n学生权益部负责人 · 管理本部门反馈\n\n导出报表\n有效反馈\n28\n本职责范围\n待受理\n6\n请及时处理\n处理中\n14\n持续跟进\n已解决\n8\n累计处理完成\n待办队列\n共 28 条事项 · 按状态与优先级实时筛选\n⌕\n↺\n全部 28\n待受理 6\n处理中 14\n高优先级\n事项\n提交人\n状态\n优先级\n更新时间\n关于教学楼自习室开放时间的建议\n#DBACK0 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK1 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK2 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK3 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK4 · teaching\n学生\n校内账号\n处理中\n一般\n18:00",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB",
+        "cls": "hub-inline-return",
+        "w": 118,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "hub-inline-return",
+        "w": 66,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "📬",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "账号设置",
+        "cls": "hub-inline-return sievox-account-settings",
+        "w": 66,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "☀",
+        "cls": "is-active",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "☾",
+        "cls": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "🎨",
+        "cls": "icon-button theme-trigger",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "导出报表",
+        "cls": "outline-button",
+        "w": 84,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "搜索反馈标题或内容",
+        "cls": "",
+        "w": 190,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "↺",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部 28",
+        "cls": "is-active",
+        "w": 71,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "待受理 6",
+        "cls": "",
+        "w": 75,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "处理中 14",
+        "cls": "",
+        "w": 80,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "高优先级",
+        "cls": "",
+        "w": 77,
+        "h": 43
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "×",
+        "cls": "icon-button case-desktop-close",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "INPUT",
+        "text": "回复附件",
+        "cls": "",
+        "w": 229,
+        "h": 40
+      },
+      {
+        "tag": "BUTTON",
+        "text": "发送回复",
+        "cls": "send-button",
+        "w": 69,
+        "h": 40
+      },
+      {
+        "tag": "BUTTON",
+        "text": "标记为已解决",
+        "cls": "resolve-button",
+        "w": 298,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "拒绝",
+        "cls": "outline-button danger-text",
+        "w": 298,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "撤回问题",
+        "cls": "outline-button danger-text",
+        "w": 298,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "hover:text-purple-200 transition-colors",
+        "w": 122,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "flex items-center gap-1 hover:text-purple-200 transition-colors",
+        "w": 167,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "INPUT",
+        "text": "搜索反馈标题或内容",
+        "cls": "",
+        "font": "10px"
+      },
+      {
+        "tag": "TEXTAREA",
+        "text": "输入处理进展或需要学生补充的信息…",
+        "cls": "",
+        "font": "9px"
+      }
+    ],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10.08px",
+      "10px",
+      "11.232px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "19px",
+      "25px",
+      "27px",
+      "31.68px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生权益部处理台",
+      "待办队列",
+      "宿舍楼热水供应时间问题"
+    ],
+    "inputFont": "9px",
+    "errors": []
+  },
+  {
+    "name": "role-volunteer",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 2939,
+    "bodyText": "国际教育学院\n›\n学生权益部处理台\n绩效考核\n📬\n🎨\n中文\nEN\n处理台\n归档\n发起反馈\n指南\n我的反馈\n绩效\n账号\n\nSIEVOX · 反馈处理\n\n学生权益部处理台\n\n学生权益部 · 处理本部门反馈\n\n导出报表\n有效反馈\n28\n本职责范围\n待受理\n6\n请及时处理\n处理中\n14\n持续跟进\n已解决\n8\n累计处理完成\n待办队列\n共 28 条事项 · 按状态与优先级实时筛选\n⌕\n↺\n全部 28\n待受理 6\n处理中 14\n高优先级\n关于教学楼自习室开放时间的建议\n#DBACK0 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK1 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK2 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK3 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK4 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK5 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK6 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK7 · teach",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB 模块总览",
+        "cls": "hub-inline-return",
+        "w": 89,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "hub-inline-return",
+        "w": 62,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "📬",
+        "cls": "icon-button",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "🎨",
+        "cls": "icon-button theme-trigger",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "导出报表",
+        "cls": "outline-button",
+        "w": 84,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "hover:text-purple-200 transition-colors",
+        "w": 102,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "flex items-center gap-1 hover:text-purple-200 transition-colors",
+        "w": 139,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "24px",
+      "25px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生权益部处理台",
+      "待办队列"
+    ],
+    "errors": []
+  },
+  {
+    "name": "role-presidium",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 2939,
+    "bodyText": "国际教育学院\n›\n学生权益部处理台\n绩效考核\n📬\n🎨\n中文\nEN\n处理台\n归档\n发起反馈\n指南\n我的反馈\n绩效\n账号\n\nSIEVOX · 反馈处理\n\n学生权益部处理台\n\n主席团成员 · 分管学生权益部反馈\n\n导出报表\n有效反馈\n28\n本职责范围\n待受理\n6\n请及时处理\n处理中\n14\n持续跟进\n已解决\n8\n累计处理完成\n待办队列\n共 28 条事项 · 按状态与优先级实时筛选\n⌕\n↺\n全部 28\n待受理 6\n处理中 14\n高优先级\n关于教学楼自习室开放时间的建议\n#DBACK0 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK1 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK2 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK3 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK4 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK5 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK6 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK7 · tea",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB 模块总览",
+        "cls": "hub-inline-return",
+        "w": 89,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "hub-inline-return",
+        "w": 62,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "📬",
+        "cls": "icon-button",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "🎨",
+        "cls": "icon-button theme-trigger",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "导出报表",
+        "cls": "outline-button",
+        "w": 84,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "hover:text-purple-200 transition-colors",
+        "w": 102,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "flex items-center gap-1 hover:text-purple-200 transition-colors",
+        "w": 139,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "24px",
+      "25px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生权益部处理台",
+      "待办队列"
+    ],
+    "errors": []
+  },
+  {
+    "name": "role-ultimate",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 3097,
+    "bodyText": "国际教育学院\n›\n学院权益治理总控台\n本人反馈\n反馈处理台\n终极管理\n绩效考核\n📬\n🎨\n中文\nEN\n处理台\n归档\n发起反馈\n指南\n我的反馈\n绩效\n账号\n组织治理\n\nSIEVOX · 权益治理\n\n权益治理总览\n\n全平台 · 查看各部门反馈。在这里查看反馈进度；账号与届次请进入组织治理。\n\n当前模块\n业务反馈\n有效反馈\n28\n全部职责范围\n待受理\n6\n需要及时查看\n处理中\n14\n持续跟进\n已解决\n8\n累计处理完成\n待办队列\n共 28 条事项 · 按状态与优先级实时筛选\n⌕\n↺\n全部 28\n待受理 6\n处理中 14\n高优先级\n关于教学楼自习室开放时间的建议\n#DBACK0 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK1 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK2 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK3 · teaching\n学生\n校内账号\n待处理\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK4 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n宿舍楼热水供应时间问题\n#DBACK5 · teaching\n学生\n校内账号\n处理中\n一般\n18:00\n2026/10/20\n关于教学楼自习室开放时间的建议\n#DBACK6 · teaching\n学生\n校内账号\n待处",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "本人反馈",
+        "cls": "",
+        "w": 80,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "反馈处理台",
+        "cls": "",
+        "w": 80,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "终极管理",
+        "cls": "is-active",
+        "w": 80,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB 模块总览",
+        "cls": "hub-inline-return",
+        "w": 89,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "hub-inline-return",
+        "w": 62,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "📬",
+        "cls": "icon-button",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "🎨",
+        "cls": "icon-button theme-trigger",
+        "w": 44,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "上一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一页",
+        "cls": "",
+        "w": 74,
+        "h": 41
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "hover:text-purple-200 transition-colors",
+        "w": 102,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "flex items-center gap-1 hover:text-purple-200 transition-colors",
+        "w": 139,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "14px",
+      "15px",
+      "16px",
+      "18px",
+      "24px",
+      "25px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "权益治理总览",
+      "待办队列"
+    ],
+    "errors": []
+  },
+  {
+    "name": "student-dialog-390",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 2182,
+    "bodyText": "SIEHUB\n审\n学生服务\n课程资源共享\n课程资料、真题课件与学习笔记的共享、上传和审核。\n进入\n学生权益反馈\n学生诉求提交、办理进度追踪与服务响应闭环。\n进入\nSIEHUB\n关于开展本学期校园服务与学生交流活动的通知\n\nWECHAT MP\n\n关注“国教空间”\n中午好，审计示例成员\n13:28\n10月23日周五 · 北京时间\nSIEVOX 首次响应：2.5 小时\n\nSIEHUB 消息中心\n\n新闻动态 · 通知公告\n5\n全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n选择起始日期\n选择终止日期\n仅看最新\nNOTICE\n通知公告\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\n10月20日\n学生会 · 学生权益部\n关于开展本学期校园服务与学生交流活动的通知\nDEPT\n\nSHOWCASE GATEWAY\n\n部门风采入口\n全部部门\n01\n团委\n组织部\n宣传部\n实践部\n志愿者工作部\n02\n学生会\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n首页\n部门\n账号设置\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "上一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 1",
+        "cls": "is-active",
+        "w": 24,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 2",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 3",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 4",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "第 5",
+        "cls": "",
+        "w": 8,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "下一条推文",
+        "cls": "",
+        "w": 32,
+        "h": 32
+      },
+      {
+        "tag": "BUTTON",
+        "text": "",
+        "cls": "siehub-wechat-cover",
+        "w": 42,
+        "h": 42
+      },
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "w": 109,
+        "h": 34
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择起始日期",
+        "cls": "siehub-date-field",
+        "w": 109,
+        "h": 34
+      },
+      {
+        "tag": "LABEL",
+        "text": "选择终止日期",
+        "cls": "siehub-date-field",
+        "w": 109,
+        "h": 34
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "全部部门",
+        "cls": "siehub-section-link",
+        "w": 84,
+        "h": 33
+      },
+      {
+        "tag": "BUTTON",
+        "text": "组织部",
+        "cls": "siehub-department-chip tone-indigo",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "宣传部",
+        "cls": "siehub-department-chip tone-orange",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "实践部",
+        "cls": "siehub-department-chip tone-green",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "志愿者工作部",
+        "cls": "siehub-department-chip tone-red",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "综合办公室",
+        "cls": "siehub-department-chip tone-slate",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学生权益部",
+        "cls": "siehub-department-chip tone-blue",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "文体艺术部",
+        "cls": "siehub-department-chip tone-purple",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "学术科技部",
+        "cls": "siehub-department-chip tone-teal",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "BUTTON",
+        "text": "新媒体工作部",
+        "cls": "siehub-department-chip tone-pink",
+        "w": 163,
+        "h": 36
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "SELECT",
+        "text": "全部部门\n组织部\n宣传部\n实践部\n志愿者工作部\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部",
+        "cls": "",
+        "font": "10px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "siehub-checkbox",
+        "font": "11px"
+      }
+    ],
+    "unnamed": [
+      {
+        "tag": "BUTTON",
+        "text": "",
+        "cls": "siehub-wechat-cover"
+      }
+    ],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "18px",
+      "19px",
+      "20px",
+      "21px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "学生服务",
+      "关注“国教空间”",
+      "新闻动态 · 通知公告",
+      "通知公告",
+      "部门风采入口"
+    ],
+    "errors": []
+  },
+  {
+    "name": "student-dialog-1440",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "scrollHeight": 1103,
+    "bodyText": "SIEVOX\n学生权益反馈系统\n\n学生服务\n\n权益工作台\n发起反馈\nN\n我的反馈\n●\n服务指南\n反馈通道正常\n2.5 小时\n\n本学期平均首次响应\n\n0 条已计入 / 共 0 条\n审\n审计示例成员\n学生\n国际教育学院\n权益工作台\n返回 SIEHUB\n审计示例成员\n学生\n中文\nEN\n\n10月23日周五 · 13:28 北京时间\n\n中午好，审计示例成员\n\n你有 14 条反馈正在处理，最近一次更新于 10/21 18:00。\n\n发起新反馈\n累计反馈\n28持续记录\n处理中\n14等待部门更新\n已解决\n08解决率提升中\n待受理\n06进入受理队列\n从哪里开始？\n\n选择问题领域，我们会自动匹配负责部门。\n\n教学教务\n课程、考试与学籍\n宿舍住宿\n环境与生活服务\n餐饮服务\n食品、价格与运营\n安全保卫\n人身、消防与网络\n综合服务\n活动、心理与行政\n最近反馈\n\n所有进度与回复会在这里持续留痕。\n\n查看全部\n关于教学楼自习室开放时间的建议\n综合服务 · 教学设施\n待受理\n10/21 18:00\n已进入队列\n撤回\n宿舍楼热水供应时间问题\n综合服务 · 教学设施\n处理中\n10/21 18:00\n已进入队列\n关于教学楼自习室开放时间的建议\n综合服务 · 教学设施\n处理中\n10/21 18:00\n已进入队列\n\nACTIVE CASE\n\n处理中\n处理中\n\n#DBACK1\n\n宿舍楼热水供应时间问题\n\n事项已进入处理流程，新的处理进展会通过站内通知同步。\n\n提交成功\n10/20 18:00\n部门核实中\n10/21 18:00\n归档留痕\n反馈记录永久保留\n查看完整对话\n你的声音，会抵达。\n\n匿名反馈不会向处理部门展示个人",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "返回 SIEHUB",
+        "cls": "hub-inline-return",
+        "w": 118,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "浅色模式",
+        "cls": "is-active",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "深色模式",
+        "cls": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "外观设置",
+        "cls": "icon-button theme-trigger",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "消息通知",
+        "cls": "icon-button",
+        "w": 38,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "发起新反馈",
+        "cls": "primary-button",
+        "w": 127,
+        "h": 42
+      },
+      {
+        "tag": "BUTTON",
+        "text": "查看全部",
+        "cls": "text-button",
+        "w": 74,
+        "h": 30
+      },
+      {
+        "tag": "BUTTON",
+        "text": "撤回",
+        "cls": "feedback-withdraw-button",
+        "w": 48,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "查看完整对话",
+        "cls": "wide-outline-button",
+        "w": 290,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "19px",
+      "20px",
+      "25px",
+      "28px",
+      "31.68px",
+      "9px"
+    ],
+    "headings": [
+      "中午好，审计示例成员",
+      "从哪里开始？",
+      "最近反馈",
+      "处理中",
+      "宿舍楼热水供应时间问题"
+    ],
+    "errors": []
+  },
+  {
+    "name": "policy-editor",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 3295,
+    "bodyText": "SIEHUB\n审\n返回模块总览\n新媒体工作部\n内容矩阵、平台运营与视觉创作\n学生端\n管理端\n部门介绍编辑\n通知管理\n成员管理\n账号管理\n部门资料库\n绩效考核\n学期评价\n活动记录\n部门标准\n\nPERFORMANCE / 学期绩效\n\n学期成绩与评价\n上级逐项评分 70% · 本人自评 10% · 同伴互评 20%。三部分齐全后生成学期总分。\n考核学期\n2026-2027学年 第一学期\n本学期总分\n86.5\n已完成\n上级评分\n88\n自评\n85\n互评\n82\n考勤积分\n活动贡献\n权益跟进\n文案与策划\n其他常规\n考勤积分\n17.0 / 20.0\n活动贡献\n29.8 / 35.0\n权益跟进\n21.3 / 25.0\n文案与策划\n12.8 / 15.0\n其他常规\n4.3 / 5.0\n01\n学期末逐项评价\n\n志愿者由负责人评分；负责人由主席团评分。自评与互评在学期末填写，归档前可修改。\n\n评价对象\n示例志愿者1 · 志愿者\n评价类型\n负责人评分\n\n逐项填写本学期实际表现，系统自动换算为百分制。只评价实际了解的工作。\n\n考勤积分 · 满分 20\n活动贡献 · 满分 35\n权益跟进 · 满分 25\n文案与策划 · 满分 15\n其他常规 · 满分 5\n评价依据与意见\n分项合计：待填写\n提交本学期评价\n02\n学期成绩\n\n缺少上级评分、自评或互评时显示待完成，不临时重分配权重。\n\n志愿者排名 · 已完成学期总分\n1. 示例志愿者1\n86.5 分\n2. 示例志愿者2\n86.5 分\n3. 示例志愿者3\n86.5 分\n4. 示例志愿者4\n86.5 分\n示例志愿者1 志愿者\n学期总分：86.5\n上级 88 · 自评",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "部门介绍编辑",
+        "cls": "",
+        "w": 102,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "通知管理",
+        "cls": "",
+        "w": 86,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "成员管理",
+        "cls": "",
+        "w": 86,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "账号管理",
+        "cls": "",
+        "w": 86,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "部门资料库",
+        "cls": "",
+        "w": 90,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "绩效考核",
+        "cls": "is-active",
+        "w": 86,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "提交本学期评价",
+        "cls": "siehub-wide-action",
+        "w": 294,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "24px",
+      "26px",
+      "30px"
+    ],
+    "headings": [
+      "新媒体工作部",
+      "学期成绩与评价"
+    ],
+    "savedDimensions": 5,
+    "errors": []
+  },
+  {
+    "name": "organization",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 2762,
+    "bodyText": "SIEHUB\n审\n返回模块总览\n团委学生会组织治理中枢\n届次成员、身份角色、分管部门与归档快照从 SIEVOX 中移出，由终极管理员在 SIEHUB 统一维护。\n组织架构\n首页与新闻\n\n终极管理员 · 组织框架\n\n团委学生会架构\n2\n组织\n9\n部门\n4\n当前届成员\n查看组织架构与身份说明\n\nCohort Archive\n\n届次与归档\n当前届\n草稿届次\n创建届次\n2026—2027学年团委学生会\nactive\n2026-2027学年 第一学期\n\n删除会移除当前届次及其成员归档记录，需输入完整届次名称和“确认删除”。\n\n删除当前届次\n\nMember Assignment\n\n成员身份与分管部门\n\n当前届次：2026—2027学年团委学生会\n\n2026-2027学年 第一学期 · 学期末评价已开放\n关闭评价\n2026-2027学年 第一学期 · 已归档 0/4 人\n归档本学期\n生成归档预览\n确认归档\n选择成员账号\n当前筛选到 4 个可选账号\n选择成员账号\n示例志愿者1 · 2026000001 · 志愿者\n示例志愿者2 · 2026000001 · 志愿者\n示例志愿者3 · 2026000001 · 志愿者\n示例志愿者4 · 2026000001 · 志愿者\n学生\n志愿者\n部门负责人层级\n主席团层级\n志愿者\n选择所属组织与部门\n团委 · 组织部\n团委 · 宣传部\n团委 · 实践部\n团委 · 志愿者工作部\n学生会 · 综合办公室\n学生会 · 学生权益部\n学生会 · 文体艺术部\n学生会 · 学术科技部\n学生会 · 新媒体工作部\n保存成员身份与分管部门\n清空编辑\n成员\t身份\t所属部门\t分管部",
+    "overflow": [
+      {
+        "tag": "TABLE",
+        "text": "成员\t身份\t所属部门\t分管部门\t绩效快照\t操作\n志愿者4 人\n示例志愿者1\n2026000001\n\t志愿者\t学生权益部\tundef",
+        "cls": "w-full text-left text-sm whitespace-nowrap",
+        "width": 2129
+      },
+      {
+        "tag": "THEAD",
+        "text": "成员\t身份\t所属部门\t分管部门\t绩效快照\t操作",
+        "cls": "bg-white/5 text-purple-100/60",
+        "width": 2129
+      },
+      {
+        "tag": "TR",
+        "text": "成员\t身份\t所属部门\t分管部门\t绩效快照\t操作",
+        "cls": "",
+        "width": 2129
+      },
+      {
+        "tag": "TH",
+        "text": "分管部门",
+        "cls": "px-4 py-3",
+        "width": 1561
+      },
+      {
+        "tag": "TBODY",
+        "text": "志愿者4 人\n示例志愿者1\n2026000001\n\t志愿者\t学生权益部\tundefined · undefined、undefin",
+        "cls": "divide-y divide-white/10",
+        "width": 2129
+      },
+      {
+        "tag": "TR",
+        "text": "志愿者4 人",
+        "cls": "org-member-tier-row",
+        "width": 2129
+      },
+      {
+        "tag": "TD",
+        "text": "志愿者4 人",
+        "cls": "px-4 py-2",
+        "width": 2129
+      },
+      {
+        "tag": "TR",
+        "text": "示例志愿者1\n2026000001\n\t志愿者\t学生权益部\tundefined · undefined、undefined · un",
+        "cls": "org-member-row text-purple-50",
+        "width": 2129
+      },
+      {
+        "tag": "TD",
+        "text": "undefined · undefined、undefined · undefined、undefined · undefined",
+        "cls": "px-4 py-3",
+        "width": 1561
+      },
+      {
+        "tag": "TR",
+        "text": "示例志愿者2\n2026000001\n\t志愿者\t学生权益部\tundefined · undefined、undefined · un",
+        "cls": "org-member-row text-purple-50",
+        "width": 2129
+      },
+      {
+        "tag": "TD",
+        "text": "undefined · undefined、undefined · undefined、undefined · undefined",
+        "cls": "px-4 py-3",
+        "width": 1561
+      },
+      {
+        "tag": "TR",
+        "text": "示例志愿者3\n2026000001\n\t志愿者\t学生权益部\tundefined · undefined、undefined · un",
+        "cls": "org-member-row text-purple-50",
+        "width": 2129
+      },
+      {
+        "tag": "TD",
+        "text": "undefined · undefined、undefined · undefined、undefined · undefined",
+        "cls": "px-4 py-3",
+        "width": 1561
+      },
+      {
+        "tag": "TR",
+        "text": "示例志愿者4\n2026000001\n\t志愿者\t学生权益部\tundefined · undefined、undefined · un",
+        "cls": "org-member-row text-purple-50",
+        "width": 2129
+      },
+      {
+        "tag": "TD",
+        "text": "undefined · undefined、undefined · undefined、undefined · undefined",
+        "cls": "px-4 py-3",
+        "width": 1561
+      }
+    ],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [
+      {
+        "tag": "INPUT",
+        "text": "例：2026届团委学生会",
+        "cls": "org-governance-field w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outlin"
+      },
+      {
+        "tag": "INPUT",
+        "text": "绩效学期，多个学期用逗号分隔",
+        "cls": "org-governance-field w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outlin"
+      }
+    ],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px",
+      "20px",
+      "22px",
+      "24px",
+      "26px",
+      "9.6px"
+    ],
+    "headings": [
+      "团委学生会组织治理中枢",
+      "团委学生会架构",
+      "团委",
+      "学生会",
+      "身份与权限映射",
+      "届次与归档",
+      "成员身份与分管部门"
+    ],
+    "errors": []
+  },
+  {
+    "name": "bridge",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 1505,
+    "bodyText": "SIEBridge\n审\n返回 SIEHUB\n课程资源\n我的\n添加课程\n全部专业\n计算机科学与技术\n生物工程\n全部年级\n大一\n大二\n大三\n大四\nMATH101\n高等数学（上）\n· 未分类 · 未分类\n选择一门课程\n课程资料会按往年真题、课件、笔记整理分区展示。\n\nMY SUBMISSIONS\n\n我的上传审核情况\n\n暂无提交记录\n\n首页\n部门\n账号设置\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "18px"
+    ],
+    "headings": [
+      "课程资源",
+      "我的上传审核情况"
+    ],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 1598,
+    "bodyText": "SIEHUB\n审\n返回 SIEHUB\n审\n\nACCOUNT SETTINGS\n\n账号设置\n学生 · 2026000001\n更换头像\n账号信息\n\n更新姓名、邮箱、手机号等基础信息。\n\n姓名\n学号\n邮箱\n手机号\n保存信息\n密码修改\n\n使用当前密码校验后设置新密码。\n\n当前密码\n新密码\n确认新密码\n修改密码\n首页\n部门\n账号设置\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "16px",
+      "18px"
+    ],
+    "headings": [
+      "账号设置",
+      "账号信息",
+      "密码修改"
+    ],
+    "errors": []
+  },
+  {
+    "name": "academic",
+    "passed": true,
+    "title": "学术科技部 | SIEHUB",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 13585,
+    "bodyText": "学术科技部\nACADEMIC TECHNOLOGY\n\nAcademic Growth Atlas\n\n从课程到成果，搭起每一步的学术支点\n\n学术科技部把课程辅导、外语表达、奖学金经验、科创竞赛与资源共享组织成一条可回看的成长路径。\n\n进入 SIEBridge\n查看活动图谱\n\n五条成长路径\n\n从学辅到科创，打开学术科技部的活动图谱\n\n围绕课程支持、榜样经验、科创实践与成果展示，串起同学们在学术成长中的每一次参与。\n\n01\nSIE学辅\n课程基础与表达训练\n02\n奖学金答辩\n榜样经验与答辩现场\n03\n科创竞赛\n项目报名、选拔与规划\n04\n院周活动\n跨校联合宣讲\n05\n创新表彰\n成果颁奖与经验分享\n\n在考前最需要方向的时候，把知识点、题型和复习节奏一起梳理清楚。\n\nSIE学辅\n\n期中、期末考试前，为帮助同学们高效复习，充足备考，轻松应考，学术科技部会开展考前复习活动——针对知识点、题型进行串讲与辅导，我们将邀请往届的高绩点讲师为大家系统梳理知识体系，总结分享做题经验，助力大家取得佳绩。\n\n考前串讲\n高等数学\n\n把极限、导数、积分和常见题型重新梳成一条清晰的复习线。\n\n查看推文\n↗\n01 / 04\n考前串讲\n普通物理\n\n力学、电磁学和核心公式一起整理，帮助同学快速抓住得分路径。\n\n查看推文\n↗\n01 / 03\n考前串讲\n复变函数与积分变换\n\n把常见题型拆成方法块，方便同学在冲刺阶段反复调用。\n\n查看推文\n↗\n01 / 03\n考前串讲\n大学英语与四六级\n\n围绕阅读、写作和听力做临考梳理，把复习重点拉回到考场里。\n\n查看推文\n↗\n考前串讲\n有机化学\n\n把反应机理、推断思路和易错点拆开讲清，让知",
+    "overflow": [
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image active",
+        "width": 437
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      },
+      {
+        "tag": "IMG",
+        "text": "",
+        "cls": "hero-image",
+        "width": 406
+      }
+    ],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "学术科技部\nACADEMIC TECHNOLOGY",
+        "cls": "brand",
+        "w": 260,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "打开导航",
+        "cls": "menu-button",
+        "w": 36,
+        "h": 34
+      },
+      {
+        "tag": "A",
+        "text": "进入 SIEBridge",
+        "cls": "button primary",
+        "w": 134,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看活动图谱",
+        "cls": "button ghost",
+        "w": 110,
+        "h": 38
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 1 张代表照片",
+        "cls": "active",
+        "w": 28,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 2 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 3 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 4 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 5 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 6 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 7 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 8 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 9 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "BUTTON",
+        "text": "切换到第 10 张代表照片",
+        "cls": "",
+        "w": 9,
+        "h": 8
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 328,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 328,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 328,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 328,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 328,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "查看推文\n↗",
+        "cls": "article-link",
+        "w": 328,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "阅读全文",
+        "cls": "",
+        "w": 105,
+        "h": 34
+      },
+      {
+        "tag": "A",
+        "text": "阅读全文",
+        "cls": "",
+        "w": 105,
+        "h": 34
+      },
+      {
+        "tag": "A",
+        "text": "阅读全文",
+        "cls": "",
+        "w": 105,
+        "h": 34
+      },
+      {
+        "tag": "A",
+        "text": "阅读全文",
+        "cls": "",
+        "w": 105,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "查看竞赛图集",
+        "cls": "text-button",
+        "w": 152,
+        "h": 38
+      },
+      {
+        "tag": "A",
+        "text": "返回 SIEHUB",
+        "cls": "",
+        "w": 66,
+        "h": 14
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13.3333px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "18px",
+      "22px",
+      "24px",
+      "26px",
+      "28.08px",
+      "28px",
+      "30px",
+      "32px",
+      "34px",
+      "36.66px",
+      "44px",
+      "58.5px",
+      "9px"
+    ],
+    "headings": [
+      "从课程到成果，搭起每一步的学术支点",
+      "从学辅到科创，打开学术科技部的活动图谱",
+      "SIE学辅",
+      "高等数学",
+      "普通物理",
+      "复变函数与积分变换",
+      "大学英语与四六级",
+      "有机化学",
+      "意大利语",
+      "让语言练习在真实交流中发生",
+      "Speak Up！外语角",
+      "把优秀拆解成可以参考的路径",
+      "国家奖学金答辩",
+      "国奖分享会",
+      "社会资助奖学金答辩"
+    ],
+    "errors": []
+  },
+  {
+    "name": "culture",
+    "passed": true,
+    "title": "文体艺术部门｜北京化工大学国际教育学院",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 15077,
+    "bodyText": "♪\n\n THE SHOW IS ABOUT TO BEGIN\n\n青春，\n正在开场\n\n我们把晚会的灯光、赛场的呐喊和不同文化的相遇， 写进属于国教学子的校园记忆。\n\n领取活动节目单 →\n01 认识我们\n文化交融\nCULTURE\n运动活力\nSPORTS\n艺术表达\nART\nADMIT ONE · 青春入场券\n下一幕，等你登场\n\n ABOUT US\n\n北京化工大学国际教育学院文体艺术部\n\n我们把热爱，\n做成一场场真实的活动\n部门简介\n\n文体艺术部负责学院文化、体育活动与艺术实践。我们排节目、约场地、做宣传， 也在晚会落幕后收好最后一根线，在比赛开始前确认每一位队员到场。 从国际文化节到运动会，我们希望中外同学因为一次排练、一场比赛或一段旋律认识彼此。 在这里，每一种热爱都能被看见，每一份创意都有机会成为真实的校园记忆。\n\n文化\nCULTURE\n体育\nSPORTS\n艺术\nART\n国际交流\nGLOBAL EXCHANGE\n01\n文\n文化交流\n\n让不同国家、不同成长背景的同学，在一次共同参与里真正认识彼此。\n\n02\n体\n体育活力\n\n从组队、训练到站上赛场，让拼搏、协作与掌声成为青春的共同语言。\n\n03\n艺\n艺术表达\n\n把音乐、舞蹈与创意搬上舞台，也认真记录台前幕后每一张年轻面孔。\n\n WHAT WE DO\n\n主要职责\n\n从创意构想到活动落地，我们让每一场校园相遇更有意义。\n\n01\n\n策划并组织学院文化、体育和艺术类活动，丰富学生课余生活。\n\n02\n\n协助学院开展迎新、节庆、晚会、比赛等大型校园活动。\n\n03\n\n发掘和展示学生的文体艺术特长，为同学们提供交流与展示的平台。\n\n04\n\n促进中外学",
+    "overflow": [
+      {
+        "tag": "DIV",
+        "text": "让热爱登场\n✦\n让创意发生\n✦\n让文化相遇\n✦\n让青春发光\n✦\nMAKE THE MOMENT\n✦\n让热爱登场\n✦",
+        "cls": "",
+        "width": 897
+      }
+    ],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "18600384465",
+        "cls": "",
+        "w": 69,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "回到顶部 ↑",
+        "cls": "",
+        "w": 48,
+        "h": 14
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 110,
+        "h": 12
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 157,
+        "h": 16
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13.3333px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "17px",
+      "18px",
+      "19px",
+      "21.06px",
+      "21px",
+      "22px",
+      "23px",
+      "26px",
+      "30px",
+      "32px",
+      "35px",
+      "37px",
+      "41px",
+      "42px",
+      "48px",
+      "60px",
+      "64.35px",
+      "7px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "青春，正在开场",
+      "我们把热爱，做成一场场真实的活动",
+      "文化交流",
+      "体育活力",
+      "艺术表达",
+      "主要职责",
+      "青春不设限，精彩正在发生",
+      "文化与艺术演出",
+      "体育竞技类",
+      "因为热爱，我们并肩同行",
+      "郭天麟",
+      "董若涵",
+      "李沅宸",
+      "曹子萱",
+      "牛琪瑞"
+    ],
+    "errors": []
+  },
+  {
+    "name": "dark-account",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 1598,
+    "bodyText": "SIEHUB\n审\n返回 SIEHUB\n审\n\nACCOUNT SETTINGS\n\n账号设置\n学生 · 2026000001\n更换头像\n账号信息\n\n更新姓名、邮箱、手机号等基础信息。\n\n姓名\n学号\n邮箱\n手机号\n保存信息\n密码修改\n\n使用当前密码校验后设置新密码。\n\n当前密码\n新密码\n确认新密码\n修改密码\n首页\n部门\n账号设置\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 128,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "",
+        "w": 178,
+        "h": 17
+      }
+    ],
+    "smallInputs": [],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "16px",
+      "18px"
+    ],
+    "headings": [
+      "账号设置",
+      "账号信息",
+      "密码修改"
+    ],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "passed": true,
+    "title": "SIEHUB: 一站式学生服务平台",
+    "viewport": 390,
+    "scrollWidth": 390,
+    "scrollHeight": 900,
+    "bodyText": "SIEHUB\nSIE LIFE PLATFORM\nLT1 · PLATFORM UPGRADE\n团委\nYOUTH LEAGUE\n组织部\n宣传部\n实践部\n志愿者工作部\n学生会\nSTUDENT UNION\n综合办公室\n学生权益部\n文体艺术部\n学术科技部\n新媒体工作部\n\nONE ID · ALL STUDENT WORK\n\n一处登录，抵达所有学生工作模块。\n北京化工大学\n国际教育学院\n中文\nEN\n01 / SIEHUB ACCESS\n进入 SIEHUB\n\n输入账号与密码，完成统一身份认证后进入 SIEHUB。\n\n统一身份认证\n登录信息仅用于校内身份核验、权限确认与平台安全审计。\n学号 / 账号\n密码\n我已阅读并同意《隐私条款》\n保持登录\n忘记密码？\n进入 SIEHUB\n首次使用 SIEHUB？\n创建学生账号\n\nSIEHUB 统一身份安全认证\n个人信息仅用于校内身份核验、部门工作协同与服务进度通知。\n\nCopyright© 2026 BUCT SIE\n京ICP备2026010091号-1\n京公网安备11011402055565号\n隐私保护",
+    "overflow": [],
+    "smallTargets": [
+      {
+        "tag": "BUTTON",
+        "text": "外观设置",
+        "cls": "icon-button theme-trigger",
+        "w": 34,
+        "h": 34
+      },
+      {
+        "tag": "BUTTON",
+        "text": "中文",
+        "cls": "is-active",
+        "w": 39,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "EN",
+        "cls": "",
+        "w": 33,
+        "h": 26
+      },
+      {
+        "tag": "BUTTON",
+        "text": "显示密码",
+        "cls": "",
+        "w": 30,
+        "h": 30
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "《隐私条款》",
+        "cls": "",
+        "w": 66,
+        "h": 17
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "",
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "BUTTON",
+        "text": "忘记密码？",
+        "cls": "",
+        "w": 55,
+        "h": 17
+      },
+      {
+        "tag": "BUTTON",
+        "text": "创建学生账号",
+        "cls": "",
+        "w": 66,
+        "h": 17
+      },
+      {
+        "tag": "A",
+        "text": "京ICP备2026010091号-1",
+        "cls": "",
+        "w": 90,
+        "h": 12
+      },
+      {
+        "tag": "A",
+        "text": "京公网安备11011402055565号",
+        "cls": "login-police-record",
+        "w": 128,
+        "h": 13
+      },
+      {
+        "tag": "BUTTON",
+        "text": "隐私保护",
+        "cls": "",
+        "w": 32,
+        "h": 12
+      }
+    ],
+    "smallInputs": [
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "",
+        "font": "11px"
+      },
+      {
+        "tag": "INPUT",
+        "text": "",
+        "cls": "",
+        "font": "11px"
+      }
+    ],
+    "unnamed": [],
+    "dialogs": 0,
+    "fonts": [
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "15px",
+      "16px",
+      "18px",
+      "28px",
+      "4px",
+      "6px",
+      "7px",
+      "8px",
+      "9px"
+    ],
+    "headings": [
+      "一处登录，抵达所有学生工作模块。",
+      "进入 SIEHUB"
+    ],
+    "panelTop": 0,
+    "errors": []
+  }
+]

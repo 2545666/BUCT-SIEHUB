@@ -24,6 +24,7 @@ Page({
     siteHome: null,
     homeNotices: [],
     homeLeadNotice: null,
+    selectedNotice: null,
     departmentDetail: null,
     departmentGroups: [
       {
@@ -220,6 +221,21 @@ Page({
     if (key === "bridge") {
       this.setData({ tab: "bridge" });
     }
+  },
+
+  openNotice(event) {
+    const notice = this.data.homeNotices[Number(event.currentTarget.dataset.index)];
+    if (!notice) return;
+    this.setData({ tab: "notice", selectedNotice: {
+      ...notice,
+      displayBody: this.getLocalizedText(notice.body, this.getLocalizedText(notice.content, notice.displaySummary || "暂无正文"))
+    } });
+    wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+  },
+
+  copyNoticeSource() {
+    const sourceUrl = this.data.selectedNotice && this.data.selectedNotice.sourceUrl;
+    if (sourceUrl) wx.setClipboardData({ data: sourceUrl });
   },
 
   openDepartment(event) {

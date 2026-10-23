@@ -400,7 +400,7 @@ const departmentCanvasPalette = (module) => {
       primary: '#4379ff',
       accent: '#65d7df',
       warm: '#e5bd51',
-      logo: '/SIEBridge_LOGO.png',
+      logo: '/brand/siebridge.png',
       label: 'SIEBRIDGE / ACADEMIC TECHNOLOGY',
       headline: makeLocalized('好问题\n值得有\n下一步。', 'Good questions\ndeserve\na next step.'),
       body: makeLocalized('学术科技部把课程、竞赛、表达与升学资源组织起来，让资料、经验和机会在同学之间流动。', 'Academic Technology organizes courses, competitions, expression and future pathways into a shared resource flow.'),

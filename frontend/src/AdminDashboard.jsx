@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import sieLogo from './assets/LOGO_1.png';
-import siehubLogo from './assets/SIEHUB_LOGO.png';
-import siebridgeLogo from './assets/SIEBridge_LOGO.png';
+const sieLogo = '/brand/sievox.png';
+const siehubLogo = '/brand/siehub.png';
+const siebridgeLogo = '/brand/siebridge.png';
 import beian from './assets/beian.png';
 import collegeLogo from './assets/SIE_LOGO.svg';
 import { API_BASE, requestJson, uploadFeedbackFiles } from './api';
@@ -620,13 +620,13 @@ export const OrganizationFrameworkPanel = ({ token }) => {
 
   return (
     <div className="organization-framework-panel animate-fadeIn space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8">
+      <div className="organization-summary relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8">
         <div className="absolute right-0 top-0 h-40 w-40 bg-purple-500/20 blur-3xl" />
         <div className="relative flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
             <p className="text-sm text-purple-200/60 font-medium">终极管理员 · 组织框架</p>
             <h2 className="mt-2 text-2xl md:text-4xl font-black text-white tracking-tight">团委学生会架构</h2>
-            <p className="mt-3 max-w-3xl text-sm md:text-base leading-7 text-purple-100/70">
+            <p className="organization-description mt-3 max-w-3xl text-sm md:text-base leading-7 text-purple-100/70">
               团委与学生会分开管理，主席团成员 / 团委学生兼职副书记可分管多个部门，部门负责人层级只拥有对应部门权限。
             </p>
           </div>
@@ -647,6 +647,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
         </div>
       </div>
 
+      <details className="organization-overview"><summary>查看组织架构与身份说明</summary>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {ORGANIZATION_FRAMEWORK.map(org => (
           <section key={org.key} className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
@@ -689,6 +690,8 @@ export const OrganizationFrameworkPanel = ({ token }) => {
           ))}
         </div>
       </section>
+
+      </details>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section className="org-governance-card xl:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 space-y-5">
@@ -1662,6 +1665,21 @@ const BusinessFeedbackWorkspace = ({
   selectedReplyFiles
 }) => {
   const activeFeedback = selectedFeedback || feedbacks.find(item => !item.isRevoked) || feedbacks[0] || null;
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(Boolean(selectedFeedback));
+  const listPositionRef = useRef(0);
+  const inspectorRef = useRef(null);
+  useEffect(() => {
+    if (selectedFeedback?._id) setMobileDetailOpen(true);
+  }, [selectedFeedback?._id]);
+  useEffect(() => {
+    if (!mobileDetailOpen || !window.matchMedia('(max-width: 1023px)').matches) return;
+    inspectorRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    inspectorRef.current?.querySelector('h2')?.focus({ preventScroll: true });
+  }, [mobileDetailOpen]);
+  const returnToQueue = () => {
+    setMobileDetailOpen(false);
+    requestAnimationFrame(() => window.scrollTo({ top: listPositionRef.current, behavior: 'instant' }));
+  };
   const counts = summary || {
     total: feedbacks.length,
     pending: feedbacks.filter(item => item.status === 'pending').length,
@@ -1732,7 +1750,7 @@ const BusinessFeedbackWorkspace = ({
       </section>
       )}
 
-      <div className="admin-workspace">
+      <div className={`admin-workspace ${mobileDetailOpen ? 'is-detail-open' : ''}`}>
         <section className="queue-panel">
           <div className="queue-toolbar">
             <div>
@@ -1741,7 +1759,7 @@ const BusinessFeedbackWorkspace = ({
             </div>
             <label className="search-field">
               <span>⌕</span>
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索标题或内容" />
+              <input aria-label="搜索反馈标题或内容" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索标题或内容" />
             </label>
             <button className="icon-button" type="button" title="清空筛选" aria-label="清空筛选" onClick={() => setFilters({ status: '', category: '', priority: '' })}>↺</button>
           </div>
@@ -1770,7 +1788,7 @@ const BusinessFeedbackWorkspace = ({
                   key={feedback._id}
                   className={`case-tr ${selected ? 'is-selected' : ''} ${feedback.isRevoked ? 'is-revoked' : ''}`}
                   type="button"
-                  onClick={() => setSelectedFeedback(feedback)}
+                  onClick={() => { listPositionRef.current = window.scrollY; setSelectedFeedback(feedback); setMobileDetailOpen(true); }}
                 >
                   <span>
                     <i className={`priority-mark ${priorityClass}`}></i>
@@ -1788,7 +1806,8 @@ const BusinessFeedbackWorkspace = ({
           <FeedbackPagination pagination={pagination} onPageChange={onPageChange} loading={loading} />
         </section>
 
-        <aside className="case-inspector">
+        <aside className="case-inspector" ref={inspectorRef}>
+          <button className="case-back-button" type="button" onClick={returnToQueue}>返回待办列表</button>
           {activeFeedback ? (
             <>
               {(() => {
@@ -1800,9 +1819,9 @@ const BusinessFeedbackWorkspace = ({
                   <>
                     <div className="inspector-head">
                       <div><span className={`status ${status.color === 'yellow' ? 'pending' : activeFeedback.status}`}><i></i>{isRevoked ? '学生已撤回' : status.label}</span><p>#{activeFeedback._id?.slice(-6)?.toUpperCase()}</p></div>
-                      <button className="icon-button" type="button" onClick={() => setSelectedFeedback(null)}>×</button>
+                      <button className="icon-button case-desktop-close" type="button" aria-label="关闭事项详情" onClick={() => setSelectedFeedback(null)}>×</button>
                     </div>
-                    <h2>{activeFeedback.title}</h2>
+                    <h2 tabIndex={-1}>{activeFeedback.title}</h2>
                     <div className="case-tags"><span>{cat.label}</span>{activeFeedback.subCategory && <span>{activeFeedback.subCategory}</span>}<span className={activeFeedback.priority === 'high' || activeFeedback.priority === 'urgent' ? 'high' : ''}>{priority.label}优先级</span></div>
                     <p className="case-body">{activeFeedback.content}</p>
                     <AttachmentViewer attachments={activeFeedback.attachments} />
@@ -1833,10 +1852,10 @@ const BusinessFeedbackWorkspace = ({
                     )}
 
                     <div className="reply-box">
-                      <label>回复学生（本事项草稿）</label>
-                      <textarea disabled={replySending} value={responseText} onChange={e => setResponseText(e.target.value)} placeholder="输入处理进展或需要学生补充的信息…" />
+                      <label htmlFor="case-reply">回复学生（本事项草稿）</label>
+                      <textarea id="case-reply" disabled={replySending} value={responseText} onChange={e => setResponseText(e.target.value)} placeholder="输入处理进展或需要学生补充的信息…" />
                       <div>
-                        <input type="file" multiple disabled={replySending} key={activeFeedback?._id} onChange={e => setSelectedReplyFiles(Array.from(e.target.files))} />
+                        <input aria-label="回复附件" type="file" multiple disabled={replySending} key={activeFeedback?._id} onChange={e => setSelectedReplyFiles(Array.from(e.target.files))} />
                         {selectedReplyFiles.length > 0 && <span>已选择 {selectedReplyFiles.length} 个附件</span>}
                         <button className="send-button" type="button" disabled={isRevoked || replySending} onClick={() => updateStatus(activeFeedback._id)}>发送回复</button>
                       </div>

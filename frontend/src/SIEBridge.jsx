@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { jsPDF } from 'jspdf';
 import {
   BookOpen, Check, Clock3, Download, Eye, FileText,
   Filter, Folder, FolderOpen, Plus, Search, Send, Trash2, Upload, X
 } from 'lucide-react';
 import { API_BASE } from './api';
-import siebridgeLogo from './assets/SIEBridge_LOGO.png';
+const siebridgeLogo = '/brand/siebridge.png';
 import { getSieBridgeEntityId, shouldApplyCourseDetailResponse } from './siebridgeSelection';
 import { isMarkdownFile, isPlainTextFile } from './siebridgeFileType';
 import './siebridge.css';
@@ -81,6 +80,7 @@ const wrapCanvasText = (ctx, text, maxWidth) => {
 };
 
 const renderReceiptPdfBlob = async (receipt) => {
+  const { jsPDF } = await import('jspdf');
   const files = receipt?.files || [];
   const width = RECEIPT_PAGE_WIDTH;
   const height = RECEIPT_PAGE_HEIGHT;
@@ -1249,8 +1249,7 @@ export const SIEBridgeStudentPortal = ({ token }) => {
     <section className="siebridge-shell">
       <div className="siebridge-toolbar">
         <div>
-          <p>SIEBRIDGE RESOURCE PLATFORM</p>
-          <h2>SIEBridge 课程资源共享平台</h2>
+          <h1>课程资源</h1>
         </div>
         <div className="siebridge-toolbar-actions">
           <button className="outline-button" type="button" onClick={openMyWindow}><FileText />我的</button>
@@ -1258,9 +1257,9 @@ export const SIEBridgeStudentPortal = ({ token }) => {
         </div>
       </div>
       <div className="siebridge-searchbar">
-        <label><Search /><input value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} placeholder="输入课程代码或课程名称" /></label>
-        <select value={filters.major} onChange={e => setFilters({ ...filters, major: e.target.value })}><option value="">全部专业</option>{meta.majors.map(item => <option key={item}>{item}</option>)}</select>
-        <select value={filters.grade} onChange={e => setFilters({ ...filters, grade: e.target.value })}><option value="">全部年级</option>{meta.gradeLevels.map(item => <option key={item}>{item}</option>)}</select>
+        <label><Search /><input aria-label="搜索课程代码或名称" value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} placeholder="输入课程代码或课程名称" /></label>
+        <select aria-label="筛选专业" value={filters.major} onChange={e => setFilters({ ...filters, major: e.target.value })}><option value="">全部专业</option>{meta.majors.map(item => <option key={item}>{item}</option>)}</select>
+        <select aria-label="筛选年级" value={filters.grade} onChange={e => setFilters({ ...filters, grade: e.target.value })}><option value="">全部年级</option>{meta.gradeLevels.map(item => <option key={item}>{item}</option>)}</select>
       </div>
       {message && <div className="siebridge-message">{message}<button type="button" onClick={() => setMessage('')}><X /></button></div>}
       <div className="siebridge-layout">

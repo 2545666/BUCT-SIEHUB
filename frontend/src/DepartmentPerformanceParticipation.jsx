@@ -91,8 +91,10 @@ export default function DepartmentPerformanceParticipation({ module, token, user
       <div className="siehub-performance-grid">
         <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>01</span><div><h4>学期末逐项评价</h4><p>志愿者由负责人评分；负责人由主席团评分。自评与互评在学期末填写，归档前可修改。</p></div></div>
           {semester === data?.currentSemester && data?.reviewOpen && targets.length ? <>
-            <label>评价对象<select value={selectedTarget?.id || ''} onChange={event => { setTargetId(event.target.value); setKind(''); }}>{targets.map(item => <option key={item.id} value={item.id}>{item.name} · {item.memberRole === 'volunteer' ? '志愿者' : '负责人'}</option>)}</select></label>
-            <label>评价类型<select value={selectedKind} onChange={event => setKind(event.target.value)}>{(selectedTarget?.allowedKinds || []).map(value => <option key={value} value={value}>{LABELS[value] || value}</option>)}</select></label>
+            <div className="unified-performance-selectors">
+              <label>评价对象<select value={selectedTarget?.id || ''} onChange={event => { setTargetId(event.target.value); setKind(''); }}>{targets.map(item => <option key={item.id} value={item.id}>{item.name} · {item.memberRole === 'volunteer' ? '志愿者' : '负责人'}</option>)}</select></label>
+              <label>评价类型<select value={selectedKind} onChange={event => setKind(event.target.value)}>{(selectedTarget?.allowedKinds || []).map(value => <option key={value} value={value}>{LABELS[value] || value}</option>)}</select></label>
+            </div>
             {selectedTarget && selectedKind && <EvaluationForm key={`${semester}-${selectedTarget.id}-${selectedKind}-${previous?.id || ''}`} target={selectedTarget} kind={selectedKind} previous={previous} semester={semester} busy={saving} onSubmit={submit} />}
           </> : <p className="siehub-empty-text">{semester !== data?.currentSemester ? '历史学期只读，成绩随届次归档保存。' : !data?.reviewOpen ? '学期末评价尚未开放，开放后可逐项填写。' : '当前身份暂无可评价对象。'}</p>}
         </section>

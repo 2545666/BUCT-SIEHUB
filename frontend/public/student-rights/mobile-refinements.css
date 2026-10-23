@@ -1,0 +1,16 @@
+@media (max-width: 650px) {
+  .masthead { gap: 8px; padding: 10px 14px; }
+  .brand { min-width: 0; gap: 8px; }
+  .brand-logos img:not(:last-child), .brand-logos i, .brand-copy small { display: none; }
+  .brand-logos { flex-shrink: 0; }
+  .brand-copy b { white-space: nowrap; font-size: 14px; }
+  .department-return { padding: 8px; min-height: 44px; align-content: center; font-size: 12px; white-space: nowrap; }
+  .menu-button { flex-shrink: 0; min-width: 44px; min-height: 44px; }
+  .workflow > *, .workflow-copy, .workflow-card { min-width: 0; max-width: 100%; }
+  .workflow-card { padding: 24px 18px; overflow-wrap: anywhere; }
+  .workflow-card h3 { font-size: 26px; }
+  .workflow-notes { flex-wrap: wrap; }
+  .workflow-notes button { min-height: 44px; }
+  .workflow-steps { max-width: 100%; flex-wrap: wrap; }
+  .desk-aside strong { font-size: 40px; }
+}
