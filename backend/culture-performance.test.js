@@ -32,6 +32,7 @@ test('website and bookmarked cultural page point to semester performance', () =>
   const app = fs.readFileSync(path.join(__dirname, '../frontend/src/App.jsx'), 'utf8');
   const legacyPage = fs.readFileSync(path.join(__dirname, '../frontend/public/culture-sports-arts/performance/index.html'), 'utf8');
   assert.doesNotMatch(app, /DepartmentMonthlyWorkspace|月度逐项评分与标准/);
-  assert.match(app, /学期成绩与评价/);
+  assert.match(app, /学期评价/);
+  assert.match(app, /<DepartmentPerformanceParticipation\b/);
   assert.match(legacyPage, /月度考核已停用/);
 });
