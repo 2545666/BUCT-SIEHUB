@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from './api';
 import PerformanceDimensionRadar from './PerformanceDimensionRadar';
 
-const LABELS = { self: '本人自评', leader_peer: '负责人互评', presidium_leader: '主席团评分', volunteer_leader: '志愿者评议负责人', volunteer_peer: '志愿者互评', leader_volunteer: '负责人评分' };
+const LABELS = { self: '本人自评', leader_peer: '负责人互评', presidium_leader: '主席团评分', volunteer_leader: '志愿者评议负责人', volunteer_peer: '志愿者互评', leader_volunteer: '上级评分（负责人／主席团）' };
 const request = async (path, token, options = {}) => {
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}) } });
   const data = await response.json();
@@ -12,7 +12,7 @@ const request = async (path, token, options = {}) => {
 
 function EvaluationForm({ target, kind, previous, semester, busy, onSubmit }) {
   const rubric = target.rubrics?.[kind] || [];
-  const activity = kind === 'leader_volunteer' && Object.keys(target.activity?.rawByDimension || {}).length ? target.activity : null;
+  const activity = ['leader_volunteer', 'presidium_leader'].includes(kind) && Object.keys(target.activity?.rawByDimension || {}).length ? target.activity : null;
   const [scores, setScores] = useState(() => Object.fromEntries((previous?.items || (activity ? rubric.map(item => ({ key: item.key, score: activity.byDimension?.[item.key] || 0 })) : [])).map(item => [item.key, item.score])));
   const [comment, setComment] = useState(previous?.comment || '');
   const [bonusScore, setBonusScore] = useState(previous?.bonusScore ?? activity?.byDimension?.[target.bonusItem?.key] ?? 0);
@@ -23,9 +23,9 @@ function EvaluationForm({ target, kind, previous, semester, busy, onSubmit }) {
     event.preventDefault();
     onSubmit({ targetId: target.id, kind, semester, items: rubric.map(item => ({ key: item.key, score: Number(scores[item.key]) })), bonusScore, bonusReason, comment });
   }}>
-    <p>逐项填写本学期实际表现，系统自动换算为百分制。{activity ? '活动绩效记录已预填到相应维度，负责人核对后可调整。' : '只评价实际了解的工作。'}</p>
+    <p>逐项填写本学期实际表现，系统自动换算为百分制。{activity ? '本部门日常记录已预填到相应维度，请核对后评分。' : '只评价实际了解的工作。'}</p>
     {rubric.map(item => <label key={item.key}>{item.label} · 满分 {item.max}<input type="number" min="0" max={item.max} step="0.5" required value={scores[item.key] ?? ''} onChange={event => setScores({ ...scores, [item.key]: event.target.value })} />{item.description && <small>{item.description}</small>}</label>)}
-    {kind === 'leader_volunteer' && target.bonusItem && <><label>{target.bonusItem.label} · 额外加分<input type="number" min="0" max={target.bonusItem.maxScore ?? undefined} step="0.5" value={bonusScore} onChange={event => setBonusScore(event.target.value)} /></label><label>加分依据<input maxLength="500" required={Number(bonusScore) > 0} value={bonusReason} onChange={event => setBonusReason(event.target.value)} /></label><small>额外加分由负责人认定，在 70／10／20 合成后计入学期总分。</small></>}
+    {kind === 'leader_volunteer' && target.bonusItem && <><label>{target.bonusItem.label} · 额外加分<input type="number" min="0" max={target.bonusItem.maxScore ?? undefined} step="0.5" value={bonusScore} onChange={event => setBonusScore(event.target.value)} /></label><label>加分依据<input maxLength="500" required={Number(bonusScore) > 0} value={bonusReason} onChange={event => setBonusReason(event.target.value)} /></label><small>额外加分由上级评分人认定，在 70／10／20 合成后计入学期总分。</small></>}
     <label className="unified-performance-comment">评价依据与意见<textarea rows="3" maxLength="2000" value={comment} onChange={event => setComment(event.target.value)} /></label>
     <div>分项合计：<strong>{total == null ? '待填写' : `${total.toFixed(1)} 分`}</strong></div>
     <button className="siehub-wide-action" type="submit" disabled={busy || !filled}>{busy ? '保存中…' : previous ? '更新本学期评价' : '提交本学期评价'}</button>
@@ -88,14 +88,17 @@ export default function DepartmentPerformanceParticipation({ module, token, user
     {loading && !data ? <p className="siehub-empty-text">正在加载学期绩效…</p> : <>
       {own && <div className="unified-performance-own"><div><span>本学期总分</span><strong>{own.total == null ? '待完成' : own.total.toFixed(1)}</strong><small>{own.status}</small></div><div className="unified-performance-dimensions"><span>上级评分 <b>{own.supervisor ?? '—'}</b></span><span>自评 <b>{own.self ?? '—'}</b></span><span>互评 <b>{own.peer ?? '—'}</b></span>{own.bonus > 0 && <span>额外加分 <b>+{own.bonus}</b></span>}</div></div>}
       {own?.dimensions?.length > 0 && <PerformanceDimensionRadar dimensions={own.dimensions} label="本人学期绩效" />}
+      <details className="unified-performance-own-records"><summary>我的本部门日常绩效记录 · {(data?.ownActivityRecords || []).length} 条</summary>
+        {(data?.ownActivityRecords || []).length ? data.ownActivityRecords.map(record => <p key={record.id}><strong>{record.activityName || '日常事项'} · +{record.score}</strong><br />{record.reason}</p>) : <p>本部门本学期暂无日常记录。</p>}
+      </details>
       <div className="siehub-performance-grid">
-        <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>01</span><div><h4>学期末逐项评价</h4><p>志愿者由负责人评分；负责人由主席团评分。自评与互评在学期末填写，归档前可修改。</p></div></div>
+        <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>01</span><div><h4>学期末逐项评价</h4><p>负责人、分管主席团可评价志愿者；分管主席团评价负责人。两类成员均可自评，志愿者可评价本部门负责人。兼职成员仅针对当前部门评分。</p><p>多人上级评分取平均，计入 70% 主项；自评占 10%，同伴评价占 20%。归档后只读。</p></div></div>
           {semester === data?.currentSemester && data?.reviewOpen && targets.length ? <>
             <div className="unified-performance-selectors">
-              <label>评价对象<select value={selectedTarget?.id || ''} onChange={event => { setTargetId(event.target.value); setKind(''); }}>{targets.map(item => <option key={item.id} value={item.id}>{item.name} · {item.memberRole === 'volunteer' ? '志愿者' : '负责人'}</option>)}</select></label>
-              <label>评价类型<select value={selectedKind} onChange={event => setKind(event.target.value)}>{(selectedTarget?.allowedKinds || []).map(value => <option key={value} value={value}>{LABELS[value] || value}</option>)}</select></label>
+              <label>评价对象<select aria-label="评价对象" value={selectedTarget?.id || ''} onChange={event => { setTargetId(event.target.value); setKind(''); }}>{targets.map(item => <option key={item.id} value={item.id}>{item.name} · {item.memberRole === 'volunteer' ? '志愿者' : '负责人'}</option>)}</select></label>
+              <label>评价类型<select aria-label="评价类型" value={selectedKind} onChange={event => setKind(event.target.value)}>{(selectedTarget?.allowedKinds || []).map(value => <option key={value} value={value}>{LABELS[value] || value}</option>)}</select></label>
             </div>
-            {selectedTarget && selectedKind && <EvaluationForm key={`${semester}-${selectedTarget.id}-${selectedKind}-${previous?.id || ''}`} target={selectedTarget} kind={selectedKind} previous={previous} semester={semester} busy={saving} onSubmit={submit} />}
+            {selectedTarget && selectedKind && <EvaluationForm key={`${scope}-${semester}-${selectedTarget.id}-${selectedKind}-${previous?.id || ''}`} target={selectedTarget} kind={selectedKind} previous={previous} semester={semester} busy={saving || loading} onSubmit={submit} />}
           </> : <p className="siehub-empty-text">{semester !== data?.currentSemester ? '历史学期只读，成绩随届次归档保存。' : !data?.reviewOpen ? '学期末评价尚未开放，开放后可逐项填写。' : '当前身份暂无可评价对象。'}</p>}
         </section>
         <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>02</span><div><h4>学期成绩</h4><p>缺少上级评分、自评或互评时显示待完成，不临时重分配权重。</p></div></div>

@@ -33,6 +33,7 @@ import {
 } from './DepartmentIntroduction';
 
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const UltimatePerformanceOverview = lazy(() => import('./UltimatePerformanceOverview'));
 const OrganizationFrameworkPanel = lazy(() => import('./AdminDashboard').then(module => ({ default: module.OrganizationFrameworkPanel })));
 const SIEBridgeReviewWorkspace = lazy(() => import('./SIEBridge').then(module => ({ default: module.SIEBridgeReviewWorkspace })));
 const SIEBridgeStudentPortal = lazy(() => import('./SIEBridge').then(module => ({ default: module.SIEBridgeStudentPortal })));
@@ -146,7 +147,8 @@ const SIEHUB_NAMED_PATHS = {
   sievox: '/rights',
   siebridge: '/siebridge',
   my: '/account',
-  ultimateOrganization: '/organization'
+  ultimateOrganization: '/organization',
+  ultimatePerformance: '/performance-overview'
 };
 const getSurfaceFromPath = (pathname = '') => {
   const normalized = String(pathname || '').replace(/\/+$/, '').toLowerCase() || '/';
@@ -155,6 +157,7 @@ const getSurfaceFromPath = (pathname = '') => {
   if (normalized === '/siebridge') return 'siebridge';
   if (normalized === '/account') return 'my';
   if (normalized === '/organization') return 'ultimateOrganization';
+  if (normalized === '/performance-overview') return 'ultimatePerformance';
   return '';
 };
 const getPathForSurface = (surface = '') => SIEHUB_NAMED_PATHS[surface] || '/';
@@ -1518,7 +1521,7 @@ const DEPARTMENT_SHOWCASE_URLS = {
 const CULTURE_SPORTS_ARTS_INTRO_URL = DEPARTMENT_SHOWCASE_URLS.culture_sports_arts;
 
 const SIEHUB_HISTORY_MARKER = 'siehub-navigation-v1';
-const SIEHUB_APP_SURFACES = new Set(['hub', 'departments', 'ultimateOrganization', 'department', 'sievox', 'siebridge', 'my']);
+const SIEHUB_APP_SURFACES = new Set(['hub', 'departments', 'ultimateOrganization', 'ultimatePerformance', 'department', 'sievox', 'siebridge', 'my']);
 const SIEHUB_PORTAL_VIEWS = new Set(['student', 'admin', 'superadmin']);
 
 const createSIEHUBHistoryState = (appSurface = 'hub', activeModule = null, portalView = 'superadmin') => ({
@@ -1803,6 +1806,7 @@ const calculateDepartmentScoreRows = (records = [], roster = [], policy = DEFAUL
 };
 
 const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = false, period = '', onPeriodChange }) => {
+  const [targetRole, setTargetRole] = useState('volunteer');
   const [localPeriod, setLocalPeriod] = useState('');
   const selectedPeriod = period || localPeriod;
   const changePeriod = onPeriodChange || setLocalPeriod;
@@ -1833,20 +1837,20 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = f
       if (!data.success) throw new Error(data.message || '获取部门绩效工作台失败');
       setWorkbench(data);
       if (!selectedPeriod) changePeriod(data.semester);
-      const rosterIds = (data.roster || []).map(user => user.id || user._id);
-      setRosterSelection(rosterIds);
+      const rosterIds = (targetRole === 'department_lead' ? data.assessmentLeaders || [] : data.roster || []).map(user => user.id || user._id);
+      setRosterSelection((data.roster || []).map(user => user.id || user._id));
       setRecordSelection(current => current.filter(id => rosterIds.includes(id)));
       setForm(current => ({
         ...current,
         targetSemester: data.semester || current.targetSemester,
-        dimension: data.policy?.dimensions?.[0]?.key || current.dimension
+        dimension: (targetRole === 'department_lead' ? data.leaderPolicy : data.policy)?.dimensions?.[0]?.key || current.dimension
       }));
     } catch (error) {
       setMessage(error.message || '获取部门绩效工作台失败');
     } finally {
       setLoading(false);
     }
-  }, [module?.organization, module?.key, token, canManage, selectedPeriod, changePeriod]);
+  }, [module?.organization, module?.key, token, canManage, selectedPeriod, changePeriod, targetRole]);
 
   useEffect(() => {
     refreshWorkbench();
@@ -1855,9 +1859,9 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = f
   if (!canManage) return null;
 
   const volunteers = workbench?.volunteers || [];
-  const roster = workbench?.roster || [];
-  const records = workbench?.records || [];
-  const policy = workbench?.policy || DEFAULT_VOLUNTEER_PERFORMANCE_POLICY;
+  const roster = (targetRole === 'department_lead' ? workbench?.assessmentLeaders : workbench?.roster) || [];
+  const records = (workbench?.records || []).filter(item => (item.memberRole || 'volunteer') === targetRole);
+  const policy = (targetRole === 'department_lead' ? workbench?.leaderPolicy : workbench?.policy) || DEFAULT_VOLUNTEER_PERFORMANCE_POLICY;
   const dimensions = policy.dimensions?.length ? policy.dimensions : DEFAULT_VOLUNTEER_PERFORMANCE_POLICY.dimensions;
   const scoreRows = calculateDepartmentScoreRows(records, roster, policy);
 
@@ -1950,13 +1954,16 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = f
         </div>
       </div>
       {message && <div className="siehub-policy-message">{message}</div>}
+      {workbench?.canRecordLeaders && <div className="unified-performance-tabs" aria-label="日常绩效对象">
+        {[['volunteer', '志愿者日常绩效'], ['department_lead', '负责人日常绩效']].map(([role, label]) => <button key={role} type="button" className={targetRole === role ? 'is-active' : ''} onClick={() => { setTargetRole(role); setRecordSelection([]); }} disabled={saving}>{label}</button>)}
+      </div>}
       <div className="siehub-performance-stats">
         <span><strong>{volunteers.length}</strong><em>部门志愿者账号</em></span>
-        <span><strong>{roster.length}</strong><em>本学期成员</em></span>
+        <span><strong>{roster.length}</strong><em>{targetRole === 'department_lead' ? '本部门负责人' : '本学期志愿者'}</em></span>
         <span><strong>{records.length}</strong><em>绩效流水</em></span>
       </div>
       {!readOnly && <div className="siehub-performance-grid">
-        <section className="siehub-performance-panel">
+        {targetRole === 'volunteer' && <section className="siehub-performance-panel">
           <div className="siehub-performance-panel-head"><span>01</span><div><h4>添加本学期成员</h4><p>从该部门志愿者账号中选择参与绩效核算的成员。</p></div></div>
           <div className="siehub-member-checks">
             {volunteers.length === 0 ? <p className="siehub-empty-text">该部门还没有志愿者账号。</p> : volunteers.map(user => {
@@ -1971,10 +1978,10 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = f
             })}
           </div>
           <button className="siehub-wide-action" type="button" onClick={saveRoster} disabled={saving || loading}>保存成员名单</button>
-        </section>
+        </section>}
 
         <form className="siehub-performance-panel" onSubmit={submitPerformance}>
-          <div className="siehub-performance-panel-head"><span>02</span><div><h4>批量录入绩效</h4><p>成员必须先加入本学期名单，才能录入绩效。</p></div></div>
+          <div className="siehub-performance-panel-head"><span>02</span><div><h4>批量录入{targetRole === 'department_lead' ? '负责人' : '志愿者'}绩效</h4><p>{targetRole === 'department_lead' ? '由分管主席团或终极管理员按负责人维度录入。' : '成员须先加入本部门学期名单；兼职成员各部门分别记分。'}</p></div></div>
           <div className="siehub-record-targets">
             {roster.length === 0 ? <p className="siehub-empty-text">请先添加本学期成员。</p> : roster.map(user => {
               const id = user.id || user._id;
@@ -2000,7 +2007,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = f
 
       <div className="siehub-performance-grid lower">
         <section className="siehub-performance-panel">
-          <div className="siehub-performance-panel-head"><span>03</span><div><h4>部门排行</h4><p>按当前学期已录入流水实时计算。</p></div></div>
+          <div className="siehub-performance-panel-head"><span>03</span><div><h4>{targetRole === 'department_lead' ? '负责人' : '志愿者'}日常积分</h4><p>按本部门流水计算，作为期末评分依据，不直接等同学期总分。</p></div></div>
           <div className="siehub-score-list">
             {scoreRows.length === 0 ? <p className="siehub-empty-text">暂无排行数据。</p> : scoreRows.map((row, index) => (
               <div key={row.user.id || row.user._id} className="siehub-score-row">
@@ -3816,7 +3823,7 @@ const SIEHUBHomeNotificationCenter = ({ token, onOpenSIEVOX }) => {
   );
 };
 
-const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpenSIEVOX, onOpenSIEBridge, onOpenUltimate, onOpenMy, onLogout, language = 'zh', languageSwitcher = null }) => {
+const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpenSIEVOX, onOpenSIEBridge, onOpenUltimate, onOpenPerformanceOverview, onOpenMy, onLogout, language = 'zh', languageSwitcher = null }) => {
   const modules = getAccessibleModules(user);
   const clock = usePlatformClock(language);
   const serviceMetrics = useServiceMetrics(token);
@@ -3904,6 +3911,7 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
           ))}
         </div>
       </section>
+      {user?.isUltimateAdmin && <button className="siehub-wide-action" type="button" onClick={onOpenPerformanceOverview}><Trophy />绩效总览 · 九部门考核进度与期末评价</button>}
       <section className="siehub-hero">
         <div className="siehub-hero-meta"><span>SIEHUB</span><b>{roleScope}</b></div>
         <SIEHUBWechatNewsCarousel token={token} language={language} refreshKey={wechatNewsRefreshKey} />
@@ -4341,7 +4349,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
   </main>;
 };
 
-const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLogout, languageSwitcher = null }) => {
+const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLogout, onOpenPerformanceOverview, onOpenOrganization, onOpenDepartment, performanceMode = false, languageSwitcher = null }) => {
   const allowed = Boolean(user?.isUltimateAdmin);
   const [workspace, setWorkspace] = useState('organization');
 
@@ -4355,15 +4363,14 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
       <section className="siehub-ultimate-hero">
         <span className="siehub-module-icon tone-gold"><ShieldCheck /></span>
         <div>
-          <p>SIEHUB / ULTIMATE WINDOW</p>
-          <h1>团委学生会组织治理中枢</h1>
-          <span>届次成员、身份角色、分管部门与归档快照从 SIEVOX 中移出，由终极管理员在 SIEHUB 统一维护。</span>
+          <h1>{performanceMode ? '全部门绩效总览' : '团委学生会组织治理中枢'}</h1>
+          <span>{performanceMode ? '九个部门的日常记录、期末评价、成员成绩与归档进度。' : '统一维护届次成员、身份角色、分管部门与归档快照。'}</span>
         </div>
       </section>
       {allowed ? (
         <>
-          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={workspace === 'organization' ? 'is-active' : ''} onClick={() => setWorkspace('organization')}>组织架构</button><button type="button" className={workspace === 'news' ? 'is-active' : ''} onClick={() => setWorkspace('news')}>首页与新闻</button></div>
-          <section className="siehub-organization-host">{workspace === 'news' ? <HeroNewsManagement token={token} /> : <OrganizationFrameworkPanel token={token} />}</section>
+          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={!performanceMode && workspace === 'organization' ? 'is-active' : ''} onClick={() => { setWorkspace('organization'); onOpenOrganization(); }}>组织架构</button><button type="button" className={performanceMode ? 'is-active' : ''} onClick={onOpenPerformanceOverview}>绩效总览</button><button type="button" className={!performanceMode && workspace === 'news' ? 'is-active' : ''} onClick={() => { setWorkspace('news'); onOpenOrganization(); }}>首页与新闻</button></div>
+          <section className="siehub-organization-host">{performanceMode ? <UltimatePerformanceOverview token={token} onOpenDepartment={onOpenDepartment} onOpenOrganization={onOpenOrganization} /> : workspace === 'news' ? <HeroNewsManagement token={token} /> : <OrganizationFrameworkPanel token={token} />}</section>
         </>
       ) : (
         <section className="siehub-access-denied">
@@ -5095,6 +5102,8 @@ export default function App() {
   };
   const openDepartments = () => setAppSurface('departments');
   const openUltimate = () => setAppSurface('ultimateOrganization');
+  const openPerformanceOverview = () => setAppSurface('ultimatePerformance');
+  const openDepartmentPerformance = key => { setActiveModule(findSIEHUBModuleByKey(key)); setDepartmentEntry('performance'); setAppSurface('department'); };
   const openMy = () => setAppSurface('my');
   const openSIEVOX = (target = null) => {
     setNotificationTarget(target?.feedback ? target : null);
@@ -5116,10 +5125,10 @@ export default function App() {
   let content;
   if (!user && token) content = <main className="auth-session-status"><p role="status">{authError || '正在验证登录…'}</p>{authError && <button type="button" onClick={refreshUser}>重新连接</button>}<button type="button" onClick={logout}>退出登录</button></main>;
   else if (!user) content = <LoginPage onLogin={login} onRegister={register} theme={theme} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
-  else if (appSurface === 'hub') content = <SIEHUBHome user={user} token={token} theme={theme} onOpenModule={openModule} onOpenDepartments={openDepartments} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenUltimate={openUltimate} onOpenMy={openMy} onLogout={logout} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
+  else if (appSurface === 'hub') content = <SIEHUBHome user={user} token={token} theme={theme} onOpenModule={openModule} onOpenDepartments={openDepartments} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenUltimate={openUltimate} onOpenPerformanceOverview={openPerformanceOverview} onOpenMy={openMy} onLogout={logout} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'departments') content = <SIEHUBDepartmentDirectory user={user} theme={theme} onBack={() => setAppSurface('hub')} onOpenModule={openModule} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'my') content = <MyProfileWindow user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenDepartments={openDepartments} onOpenMy={openMy} onLogout={logout} onRefreshUser={refreshUser} languageSwitcher={renderLanguageSwitcher()} />;
-  else if (appSurface === 'ultimateOrganization') content = <UltimateOrganizationWindow user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
+  else if (appSurface === 'ultimateOrganization' || appSurface === 'ultimatePerformance') content = <UltimateOrganizationWindow user={user} token={token} theme={theme} performanceMode={appSurface === 'ultimatePerformance'} onOpenPerformanceOverview={openPerformanceOverview} onOpenOrganization={openUltimate} onOpenDepartment={openDepartmentPerformance} onBack={() => setAppSurface('hub')} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'sievox') {
     content = sievoxPortalView === 'student'
       ? <DashboardPage key={user.id || user._id} notificationTarget={notificationTarget} user={user} token={token} onLogout={logout} onRefreshUser={refreshUser} onOpenMy={openMy} theme={theme} portalView={sievoxPortalView} onPortalChange={setPortalView} onBackToHub={() => setAppSurface('hub')} renderLanguageSwitcher={renderLanguageSwitcher} language={languageTools.language} enableNotifications={true} />

@@ -1,0 +1,51 @@
+.performance-overview { color: var(--sievox-text); font-size: 15px; line-height: 1.65; padding-bottom: 28px; }
+.performance-overview p { margin: 10px 0; overflow-wrap: anywhere; }
+.performance-overview small { display: block; font-size: 13px; }
+.performance-overview button, .performance-overview select { min-height: 44px; border: 1px solid var(--sievox-border, #cbd5e1); border-radius: 8px; padding: 9px 14px; background: var(--sievox-surface-strong); color: var(--sievox-text); font: inherit; cursor: pointer; }
+.performance-overview button:hover { border-color: #64748b; }
+.performance-overview button:disabled { opacity: .55; cursor: not-allowed; }
+.performance-overview :focus-visible { outline: 3px solid #0284c7; outline-offset: 3px; }
+.performance-overview-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px; }
+.performance-overview-toolbar label { display: grid; gap: 6px; }
+.performance-overview-toolbar select { max-width: 100%; }
+.performance-overview-review { display: flex; align-items: center; gap: 24px; padding: 20px; background: var(--sievox-surface-strong); border-block: 1px solid var(--sievox-border, #cbd5e1); }
+.performance-overview-review > div { flex: 1; }
+.performance-overview-review p { max-width: 72ch; }
+.performance-overview button.performance-overview-primary { background: #075985; color: #fff; border-color: #075985; flex-shrink: 0; }
+.performance-overview-status { padding-block: 12px; font-variant-numeric: tabular-nums; }
+.performance-overview-departments { border-top: 1px solid var(--sievox-border, #cbd5e1); }
+.performance-overview button.performance-overview-department { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(150px, .8fr) minmax(300px, 1.8fr); width: 100%; align-items: center; gap: 18px; text-align: left; border: 0; border-bottom: 1px solid var(--sievox-border, #cbd5e1); border-radius: 0; padding: 18px 14px; }
+.performance-overview-department[aria-pressed=true] { box-shadow: inset 0 0 0 2px #0284c7; }
+.performance-overview-progress progress { display: block; width: 100%; height: 7px; margin-top: 8px; accent-color: #0284c7; }
+.performance-overview-counts { font-size: 14px; font-variant-numeric: tabular-nums; }
+.performance-overview-detail { margin-top: 36px; }
+.performance-overview-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.performance-overview h2 { font-size: 23px; font-weight: 700; }
+.performance-overview h3 { margin: 24px 0 10px; font-size: 17px; font-weight: 700; }
+.performance-overview-policy { padding-block: 16px; margin-bottom: 16px; }
+.performance-overview summary { min-height: 44px; cursor: pointer; padding-block: 10px; }
+.performance-overview-member { border-top: 1px solid var(--sievox-border, #cbd5e1); padding: 10px 0; }
+.performance-overview-member > summary { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.performance-overview-member > summary::before { content: '+'; font-size: 22px; }
+.performance-overview-member[open] > summary::before { content: '−'; }
+.performance-overview-member > summary > span:first-of-type { flex: 1; }
+.performance-overview-member > p, .performance-overview-evaluation { padding: 12px 0; border-bottom: 1px solid var(--sievox-border, #cbd5e1); }
+.performance-overview-evaluation ul { padding-left: 22px; list-style: disc; }
+.performance-overview-toolbar .performance-overview-checkbox { display: flex; align-items: center; min-height: 44px; gap: 8px; }
+.performance-overview-checkbox input { width: 20px; height: 20px; accent-color: #075985; }
+.performance-overview-error { padding: 14px; border: 1px solid currentColor; }
+@media (max-width: 850px) {
+  .performance-overview button.performance-overview-department { grid-template-columns: 1fr 1fr; }
+  .performance-overview-counts { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .performance-overview { font-size: 16px; }
+  .performance-overview-toolbar > label { width: 100%; min-width: 0; }
+  .performance-overview-toolbar select { width: 100%; min-width: 0; font-size: 16px; }
+  .performance-overview-review { display: block; padding: 16px; }
+  .performance-overview-review button { width: 100%; margin-top: 12px; }
+  .performance-overview button.performance-overview-department { grid-template-columns: 1fr; gap: 10px; padding: 16px 12px; }
+  .performance-overview-counts { grid-column: auto; }
+  .performance-overview-member > summary { flex-wrap: wrap; gap: 8px; }
+  .performance-overview-member > summary > span:last-child { width: 100%; padding-left: 22px; }
+}

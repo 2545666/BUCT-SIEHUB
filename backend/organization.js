@@ -277,7 +277,7 @@ const getHubModuleAccess = (user = {}) => {
   }
 
   if (user.role === 'admin' && user.memberRole === 'volunteer' && user.positionTitle === 'volunteer') {
-    grant(user.organization, user.department, 'member', ['view', 'enter_student_portal', 'participate', 'view_department_files']);
+    getMemberDepartments(user).forEach(({ organization, department }) => grant(organization, department, 'member', ['view', 'enter_student_portal', 'participate', 'view_department_files']));
     return Array.from(accessByModuleId.values());
   }
 
@@ -300,6 +300,20 @@ const normalizeManagedDepartments = (assignments = []) => {
       return true;
     });
 };
+
+const getMemberDepartments = (user = {}) => normalizeManagedDepartments([
+  { organization: user.organization, department: user.department },
+  ...(user.memberRole === 'volunteer' && Array.isArray(user.volunteerDepartments) ? user.volunteerDepartments : [])
+]);
+
+const isMemberOfDepartment = (user, assignment) => getMemberDepartments(user).some(item =>
+  item.organization === assignment.organization && item.department === assignment.department
+);
+
+const departmentMemberQuery = assignment => ({ $or: [
+  { organization: assignment.organization, department: assignment.department },
+  { memberRole: 'volunteer', volunteerDepartments: { $elemMatch: { organization: assignment.organization, department: assignment.department } } }
+] });
 
 const canWithdrawSievoxFeedback = (user = {}, feedback = {}) => {
   const actorId = String(user._id || user.id || '');
@@ -415,6 +429,9 @@ function getAssignableScope(user = {}) {
 }
 
 module.exports = {
+  getMemberDepartments,
+  isMemberOfDepartment,
+  departmentMemberQuery,
   ORGANIZATIONS,
   MEMBER_ROLES,
   POSITION_TITLES,

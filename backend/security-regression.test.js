@@ -271,6 +271,7 @@ test('feedback reopening clears resolution time, uses a conditional write, and r
 
 test('one stale calibration rejects an entire batch before its single atomic replacement', async t => {
   lockMocks(t); performanceReads(t, [{ volunteer: volunteer._id, dimension: 'attendance', score: 10 }, { volunteer: owner._id, dimension: 'attendance', score: 7 }]);
+  t.mock.method(models.CohortMembership, 'exists', async () => false);
   t.mock.method(models.User, 'find', () => query([volunteer, { ...volunteer, _id: owner._id }]));
   t.mock.method(models.SemesterMember, 'exists', async () => true);
   t.mock.method(models.PerformanceCalibration, 'findById', () => query(null));

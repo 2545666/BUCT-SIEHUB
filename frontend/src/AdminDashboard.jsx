@@ -174,6 +174,7 @@ const getMemberSortRank = (member = {}) => {
 };
 const getMemberPerformanceTotal = member => Number(member?.performanceSnapshot?.total || 0);
 const GovernancePerformance = ({ snapshot }) => {
+  if (snapshot?.departments?.length) return <div>{snapshot.departments.map(item => <section key={`${item.organization}:${item.department}`}><strong>{item.departmentLabel}</strong><GovernancePerformance snapshot={item} /></section>)}</div>;
   if (!snapshot || (snapshot.source === 'none' && !(snapshot.monthlyScores || []).length && !(snapshot.records || []).length)) return <span>暂无成绩</span>;
   const monthly = (snapshot.monthlyScores || []).length > 0;
   const completed = (snapshot.monthlyScores || []).filter(item => item.combinedScore != null);
@@ -255,10 +256,12 @@ const groupMembersByDepartment = (members = []) => {
     const managedDepartments = Array.isArray(member.managedDepartments) ? member.managedDepartments : [];
     const keys = member.memberRole === 'presidium' || ['presidium_member', 'youth_league_deputy_secretary'].includes(member.positionTitle)
       ? managedDepartments.map(item => `${item.organization || ''}:${item.department || ''}`)
-      : [`${member.organization || ''}:${member.department || ''}`];
+      : member.memberRole === 'volunteer' && member.volunteerDepartments?.length ? member.volunteerDepartments.map(item => `${item.organization}:${item.department}`) : [`${member.organization || ''}:${member.department || ''}`];
+    if (member.memberRole === 'volunteer') for (const item of member.performanceSnapshot?.departments || []) keys.push(`${item.organization}:${item.department}`);
     [...new Set(keys)].forEach(key => {
       if (!grouped.has(key)) return;
-      grouped.get(key).members.push(member);
+      const scopedSnapshot = member.performanceSnapshot?.departments?.find(item => `${item.organization}:${item.department}` === key);
+      grouped.get(key).members.push(scopedSnapshot ? { ...member, performanceSnapshot: scopedSnapshot } : member);
     });
   });
   grouped.forEach(group => {
@@ -318,6 +321,7 @@ const emptyMemberForm = {
   positionTitle: 'volunteer',
   organization: '',
   department: '',
+  volunteerDepartments: [],
   managedDepartments: []
 };
 
@@ -438,6 +442,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
       positionTitle: nextTitle,
       organization: '',
       department: '',
+      volunteerDepartments: [],
       managedDepartments: []
     });
   };
@@ -490,6 +495,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
           positionTitle: memberForm.positionTitle,
           organization: memberForm.organization || null,
           department: memberForm.department || null,
+          volunteerDepartments: memberForm.memberRole === 'volunteer' ? memberForm.volunteerDepartments : [],
           managedDepartments: memberForm.memberRole === 'presidium' ? memberForm.managedDepartments : []
         })
       });
@@ -610,6 +616,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
       positionTitle: member.positionTitle || 'volunteer',
       organization: member.organization || '',
       department: member.department || '',
+      volunteerDepartments: (member.volunteerDepartments || []).filter(item => item.organization !== member.organization || item.department !== member.department).map(({ organization, department }) => ({ organization, department })),
       managedDepartments: (member.managedDepartments || []).map(item => ({
         organization: item.organization,
         department: item.department
@@ -787,6 +794,14 @@ export const OrganizationFrameworkPanel = ({ token }) => {
                 {memberForm.memberRole === 'presidium' ? '主席团层级通过下方选择多个分管部门' : '该身份无需绑定组织部门'}
               </div>
             )}
+            {memberForm.memberRole === 'volunteer' && <fieldset className="md:col-span-2 rounded-xl border border-white/10 p-3">
+              <legend>兼职部门，可多选</legend>
+              <p className="text-sm">同一账号在各部门分别录入、评价和归档绩效。上方保留主要所属部门。</p>
+              <div className="flex flex-wrap gap-2">{DEPARTMENT_OPTIONS.filter(item => item.organization !== memberForm.organization || item.department !== memberForm.department).map(item => {
+                const checked = memberForm.volunteerDepartments.some(current => current.organization === item.organization && current.department === item.department);
+                return <button type="button" key={`${item.organization}:${item.department}`} aria-pressed={checked} disabled={isArchivedCohort} className={`px-3 py-2 rounded-lg border text-sm ${checked ? 'bg-purple-600 text-white' : 'bg-white/5 text-purple-100'}`} onClick={() => setMemberForm(current => ({ ...current, volunteerDepartments: checked ? current.volunteerDepartments.filter(value => value.organization !== item.organization || value.department !== item.department) : [...current.volunteerDepartments, { organization: item.organization, department: item.department }] }))}>{item.organizationLabel} · {item.departmentLabel}</button>;
+              })}</div>
+            </fieldset>}
             {memberForm.memberRole === 'presidium' && (
               <div className="md:col-span-2 rounded-xl border border-white/10 bg-slate-950/30 p-3">
                 <div className="mb-2 text-xs font-bold text-purple-100/70">分管部门，可多选</div>
@@ -833,7 +848,7 @@ export const OrganizationFrameworkPanel = ({ token }) => {
                       <tr key={item.id || item._id} className="org-member-row text-purple-50" data-tier={group.rank}>
                         <td className="px-4 py-3 font-bold">{item.name || item.accountSnapshot?.name}<div className="text-[10px] font-normal text-purple-200/50">{item.studentId || item.accountSnapshot?.studentId}</div></td>
                         <td className="px-4 py-3">{getGovernanceMemberRoleTitle(item)}</td>
-                        <td className="px-4 py-3">{item.departmentLabel || '-'}</td>
+                        <td className="px-4 py-3">{item.memberRole === 'volunteer' && item.volunteerDepartments?.length ? item.volunteerDepartments.map(department => department.departmentLabel).join('、') : item.departmentLabel || '-'}</td>
                         <td className="px-4 py-3">{(item.managedDepartments || []).length > 0 ? item.managedDepartments.map(d => d.label || `${d.organizationLabel} · ${d.departmentLabel}`).join('、') : '-'}</td>
                         <td className="px-4 py-3">{getMemberTierRank(item) > 0 ? <GovernancePerformance snapshot={item.performanceSnapshot} /> : '-'}</td>
                         <td className="px-4 py-3">
