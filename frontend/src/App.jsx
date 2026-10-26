@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  ArrowLeft, ArrowRight, ArrowUpRight, Bell, BookOpen, Check, ChevronRight,
+  ArrowLeft, ArrowRight, ArrowUpRight, Bell, BookOpen, Check, ChevronRight, Menu,
   Download,
   GraduationCap, House, IdCard, ImagePlus, KeyRound, LayoutDashboard, LockKeyhole,
   LogOut, MessageCircleMore, MessagesSquare, Palette, Paperclip, Plus, Send,
@@ -33,6 +33,7 @@ import {
 } from './DepartmentIntroduction';
 
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const AccountAuditPanel = lazy(() => import('./AccountAuditPanel'));
 const UltimatePerformanceOverview = lazy(() => import('./UltimatePerformanceOverview'));
 const OrganizationFrameworkPanel = lazy(() => import('./AdminDashboard').then(module => ({ default: module.OrganizationFrameworkPanel })));
 const SIEBridgeReviewWorkspace = lazy(() => import('./SIEBridge').then(module => ({ default: module.SIEBridgeReviewWorkspace })));
@@ -2502,14 +2503,31 @@ const getAccessibleModules = (user) => {
 };
 
 const HubUserChip = ({ user }) => (
-  <div className="siehub-user-chip" aria-label="当前登录身份">
+  <div className="siehub-user-chip" aria-label="当前登录身份" title={`${user?.name || ''} · ${user?.identityLabel || ''}`}>
     <span className="siehub-avatar">{user?.avatarUrl ? <img src={resolveMediaUrl(user.avatarUrl)} alt="" /> : firstChar(user?.name)}</span>
-    <span><strong>{user?.name}</strong><small>{user?.studentId}</small></span>
-    <RoleTag user={user} />
+    <span className="siehub-user-identity"><strong>{user?.name}</strong><RoleTag user={user} /></span>
   </div>
 );
 
-const canViewMySecurityTools = (user = {}) =>
+const HubHeaderActions = ({ user, children }) => {
+  const [open, setOpen] = useState(false);
+  const container = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = event => { if (!container.current?.contains(event.target)) setOpen(false); };
+    const closeEscape = event => { if (event.key === 'Escape') { setOpen(false); container.current?.querySelector('.hub-menu-toggle')?.focus(); } };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', closeEscape); };
+  }, [open]);
+  return <div ref={container} className="hub-header-actions">
+    <HubUserChip user={user} />
+    <button className="hub-menu-toggle" type="button" aria-label={open ? '收起菜单' : '更多功能'} aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? <X /> : <Menu />}</button>
+    <div className={`siehub-topbar-actions hub-header-tools${open ? ' is-open' : ''}`}>{children}</div>
+  </div>;
+};
+
+const canResetAccountPassword = (user = {}) =>
   Boolean(
     user?.isUltimateAdmin ||
     (user?.role === 'superadmin' && (!user?.positionTitle || user?.positionTitle === 'student')) ||
@@ -2528,30 +2546,17 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
   const [profile, setProfile] = useState({ name: user?.name || '', studentId: user?.studentId || '', email: user?.email || '', phone: user?.phone || '' });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [resetForm, setResetForm] = useState({ studentId: '', newPassword: '', confirmPassword: '' });
-  const [logs, setLogs] = useState([]);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [emailVerification, setEmailVerification] = useState({ currentPassword: '', emailCode: '' });
   const [emailSending, setEmailSending] = useState(false);
   const emailChanged = profile.email.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase();
-  const showSecurity = canViewMySecurityTools(user);
+  const showSecurity = canResetAccountPassword(user);
+  const [accountSection, setAccountSection] = useState('profile');
 
   useEffect(() => {
     setProfile({ name: user?.name || '', studentId: user?.studentId || '', email: user?.email || '', phone: user?.phone || '' });
   }, [user?.name, user?.studentId, user?.email, user?.phone]);
-
-  const refreshLogs = useCallback(async () => {
-    if (!showSecurity || !token) return;
-    try {
-      const res = await fetch(`${API_BASE}/my/login-logs`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (data.success) setLogs(data.logs || []);
-    } catch {
-      setLogs([]);
-    }
-  }, [showSecurity, token]);
-
-  useEffect(() => { refreshLogs(); }, [refreshLogs]);
 
   const sendProfileEmailCode = async () => {
     if (!emailVerification.currentPassword) return setMessage('请先输入当前密码');
@@ -2663,18 +2668,23 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
   return <main className="siehub-shell siehub-my-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>ACCOUNT SETTINGS</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" aria-label="外观设置" title="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions>
     </header>
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回 SIEHUB</button>
       <section className="siehub-my-hero">
         <span className="siehub-avatar siehub-my-avatar">{user?.avatarUrl ? <img src={resolveMediaUrl(user.avatarUrl)} alt="" /> : firstChar(user?.name)}</span>
-        <div><p>ACCOUNT SETTINGS</p><h1>账号设置</h1><span>{user?.identityLabel || '学生账号'} · {user?.studentId}</span></div>
-        <label className="siehub-avatar-upload"><ImagePlus /><span>更换头像</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadAvatar} /></label>
+        <div className="account-summary"><h1>{user?.name}</h1><RoleTag user={user} /><span>学号 {user?.studentId}</span></div>
+        <label className="siehub-avatar-upload"><ImagePlus /><span>更换头像</span><input type="file" accept="image/png,image/jpeg,image/webp" disabled={saving} onChange={uploadAvatar} /></label>
       </section>
       {message && <div className="siehub-policy-message">{message}</div>}
+      <nav className="account-section-tabs" aria-label="账号设置分区">
+        <button type="button" aria-pressed={accountSection === 'profile'} onClick={() => { setAccountSection('profile'); setMessage(''); }}>个人资料</button>
+        <button type="button" aria-pressed={accountSection === 'password'} onClick={() => { setAccountSection('password'); setMessage(''); }}>修改密码</button>
+        {showSecurity && <button type="button" aria-pressed={accountSection === 'reset'} onClick={() => { setAccountSection('reset'); setMessage(''); }}>重置下级密码</button>}
+      </nav>
       <div className="siehub-my-grid">
-        <form className="siehub-my-card" onSubmit={saveProfile}>
+        <form className="siehub-my-card" hidden={accountSection !== 'profile'} onSubmit={saveProfile}>
           <div className="siehub-my-card-head"><IdCard /><div><h2>账号信息</h2><p>更新姓名、邮箱、手机号等基础信息。</p></div></div>
           <label><span>姓名</span><input value={profile.name} onChange={event => setProfile({ ...profile, name: event.target.value })} required /></label>
           <label><span>学号</span><input value={profile.studentId} readOnly /></label>
@@ -2687,7 +2697,7 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
           <label><span>手机号</span><input value={profile.phone} onChange={event => setProfile({ ...profile, phone: event.target.value })} /></label>
           <button className="primary-button" type="submit" disabled={saving}>保存信息</button>
         </form>
-        <form className="siehub-my-card" onSubmit={changePassword}>
+        <form className="siehub-my-card" hidden={accountSection !== 'password'} onSubmit={changePassword}>
           <div className="siehub-my-card-head"><KeyRound /><div><h2>密码修改</h2><p>使用当前密码校验后设置新密码。</p></div></div>
           <label><span>当前密码</span><input type="password" value={passwordForm.currentPassword} onChange={event => setPasswordForm({ ...passwordForm, currentPassword: event.target.value })} required /></label>
           <label><span>新密码</span><input type="password" value={passwordForm.newPassword} onChange={event => setPasswordForm({ ...passwordForm, newPassword: event.target.value })} required /></label>
@@ -2696,29 +2706,18 @@ const MyProfileWindow = ({ user, token, theme, onBack, onOpenDepartments, onOpen
         </form>
         {showSecurity && (
           <>
-            <form className="siehub-my-card" onSubmit={resetUserPassword}>
-              <div className="siehub-my-card-head"><ShieldCheck /><div><h2>密码重置</h2><p>仅超级管理员、主席/团副与终极管理员可使用。</p></div></div>
+            <form className="siehub-my-card" hidden={accountSection !== 'reset'} onSubmit={resetUserPassword}>
+              <div className="siehub-my-card-head"><ShieldCheck /><div><h2>重置下级密码</h2><p>仅可重置权限范围内的下级账号。</p></div></div>
               <label><span>目标学号</span><input value={resetForm.studentId} onChange={event => setResetForm({ ...resetForm, studentId: event.target.value })} required /></label>
               <label><span>新密码</span><input type="password" value={resetForm.newPassword} onChange={event => setResetForm({ ...resetForm, newPassword: event.target.value })} required /></label>
               <label><span>确认新密码</span><input type="password" value={resetForm.confirmPassword} onChange={event => setResetForm({ ...resetForm, confirmPassword: event.target.value })} required /></label>
               <button className="primary-button" type="submit" disabled={saving}>重置密码</button>
             </form>
-            <section className="siehub-my-card siehub-login-log-card">
-              <div className="siehub-my-card-head"><Clock3 /><div><h2>登录日志</h2><p>仅超级管理员、主席/团副与终极管理员可查看。</p></div></div>
-              <button className="outline-button" type="button" onClick={refreshLogs}>刷新日志</button>
-              <div className="siehub-login-log-list">
-                {logs.length === 0 ? <p className="siehub-empty-text">暂无登录日志。</p> : logs.map(item => (
-                  <article key={item.id}>
-                    <b className={item.success ? 'success' : 'danger'}>{item.success ? '成功' : '失败'}</b>
-                    <span>{new Date(item.createdAt).toLocaleString()}</span>
-                    <small>{item.ip || 'unknown'} · {item.reason || '-'}</small>
-                  </article>
-                ))}
-              </div>
-            </section>
+
           </>
         )}
       </div>
+      <div className="account-preferences"><button type="button" onClick={() => theme.setOpen(true)}><Palette />外观设置<ChevronRight /></button><button type="button" onClick={onLogout}><LogOut />退出登录<ChevronRight /></button></div>
     </div>
     <SIEHUBMobileDock active="my" onHome={onBack} onDepartments={onOpenDepartments} onMy={() => {}} />
     <ThemePanel theme={theme} />
@@ -3827,6 +3826,8 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
   const modules = getAccessibleModules(user);
   const showPerformanceManagement = !user?.isUltimateAdmin && user?.role === 'superadmin' && ['department_head', 'youth_league_cadre', 'presidium_member', 'youth_league_deputy_secretary'].includes(user?.positionTitle);
   const performanceModules = modules.filter(module => getModuleAccess(user, module)?.capabilities?.includes('manage_department_performance'));
+  const [performanceDepartment, setPerformanceDepartment] = useState('');
+  const selectedPerformanceModule = performanceModules.find(module => module.key === performanceDepartment) || performanceModules[0];
   const clock = usePlatformClock(language);
   const serviceMetrics = useServiceMetrics(token);
   const [wechatNewsRefreshKey, setWechatNewsRefreshKey] = useState(0);
@@ -3893,12 +3894,15 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
   return <main className="siehub-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>SIE LIFE PLATFORM</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} />{user?.isUltimateAdmin && <><button className="siehub-topbar-link" type="button" onClick={onOpenUltimate}><ShieldCheck />平台管理</button><button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button></>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button>{user?.isUltimateAdmin && <><button className="siehub-topbar-link" type="button" onClick={onOpenUltimate}><ShieldCheck />平台管理</button><button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button></>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions>
     </header>
     <div className="siehub-content">
       {showPerformanceManagement && <section className="siehub-home-performance" aria-labelledby="home-performance-title">
-        <div className="siehub-home-performance-heading"><Trophy aria-hidden="true" /><div><h2 id="home-performance-title">部门绩效管理</h2><p>录入日常绩效、开展学期评价、查看成绩与排名</p></div></div>
-        {performanceModules.length ? <div className="siehub-home-performance-actions">{performanceModules.map(module => <button type="button" key={module.key} onClick={() => onOpenDepartmentPerformance(module.key)}><span>{module.title}</span><span>进入管理 <ArrowRight aria-hidden="true" /></span></button>)}</div> : <p>暂未配置可管理的部门，请联系终极管理员设置分管范围。</p>}
+        <div className="siehub-home-performance-heading"><Trophy aria-hidden="true" /><div><h2 id="home-performance-title">部门绩效管理</h2><p>日常录入 · 学期评价 · 成绩排名</p></div></div>
+        {selectedPerformanceModule ? <div className="siehub-home-performance-actions">
+          {performanceModules.length > 1 ? <label><span>分管部门</span><select aria-label="选择绩效管理部门" value={selectedPerformanceModule.key} onChange={event => setPerformanceDepartment(event.target.value)}>{performanceModules.map(module => <option key={module.key} value={module.key}>{module.title}</option>)}</select></label> : <span className="performance-department-name">{selectedPerformanceModule.title}</span>}
+          <button type="button" onClick={() => onOpenDepartmentPerformance(selectedPerformanceModule.key)}>进入管理 <ArrowRight aria-hidden="true" /></button>
+        </div> : <p>尚未配置分管部门，请联系终极管理员。</p>}
       </section>}
       <section className="siehub-product-windows" aria-label="SIEHUB 平台入口">
         <div className="siehub-group-heading"><div><h2>学生服务</h2></div></div>
@@ -3917,7 +3921,7 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
           ))}
         </div>
       </section>
-      {user?.isUltimateAdmin && <button className="siehub-wide-action" type="button" onClick={onOpenPerformanceOverview}><Trophy />绩效总览 · 九部门考核进度与期末评价</button>}
+      {user?.isUltimateAdmin && <button className="hub-overview-entry" type="button" onClick={onOpenPerformanceOverview}><Trophy /><span><strong>绩效总览</strong><small>九部门考核进度与期末评价</small></span><ArrowRight /></button>}
       <section className="siehub-hero">
         <div className="siehub-hero-meta"><span>SIEHUB</span><b>{roleScope}</b></div>
         <SIEHUBWechatNewsCarousel token={token} language={language} refreshKey={wechatNewsRefreshKey} />
@@ -3984,7 +3988,7 @@ const SIEHUBDepartmentDirectory = ({ user, theme, onBack, onOpenModule, onOpenMy
   return <main className="siehub-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>DEPARTMENT DIRECTORY</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} /><button className="siehub-topbar-link is-active" type="button"><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><button className="siehub-topbar-link is-active" type="button"><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions>
     </header>
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ArrowLeft /> 返回首页</button>
@@ -4253,7 +4257,7 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
   };
 
   return <main className="siehub-shell siehub-department-shell">
-    <header className="siehub-topbar"><div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>{module?.title || '部门工作台'} / FRAMEWORK</small></div></div><div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" aria-label="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div></header>
+    <header className="siehub-topbar"><div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>{module?.title || '部门工作台'} / FRAMEWORK</small></div></div><HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" aria-label="外观设置" title="外观设置" onClick={() => theme.setOpen(true)}><Palette /></button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions></header>
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回模块总览</button>
       <section className="siehub-department-hero"><span className={`siehub-module-icon tone-${module?.tone || 'slate'}`}><DepartmentModuleMark module={module} /></span><div><p>SIEHUB / DEPARTMENT PLATFORM</p><h1>{module?.title}</h1><span>{module?.summary}</span></div></section>
@@ -4362,7 +4366,7 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
   return <main className="siehub-shell siehub-ultimate-window admin-demo-shell">
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>ORGANIZATION GOVERNANCE</small></div></div>
-      <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+      <HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions>
     </header>
     <div className="siehub-content">
       <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回模块总览</button>
@@ -4375,8 +4379,8 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
       </section>
       {allowed ? (
         <>
-          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={!performanceMode && workspace === 'organization' ? 'is-active' : ''} onClick={() => { setWorkspace('organization'); onOpenOrganization(); }}>组织架构</button><button type="button" className={performanceMode ? 'is-active' : ''} onClick={onOpenPerformanceOverview}>绩效总览</button><button type="button" className={!performanceMode && workspace === 'news' ? 'is-active' : ''} onClick={() => { setWorkspace('news'); onOpenOrganization(); }}>首页与新闻</button></div>
-          <section className="siehub-organization-host">{performanceMode ? <UltimatePerformanceOverview token={token} onOpenDepartment={onOpenDepartment} onOpenOrganization={onOpenOrganization} /> : workspace === 'news' ? <HeroNewsManagement token={token} /> : <OrganizationFrameworkPanel token={token} />}</section>
+          <div className="siehub-portal-switch" aria-label="终极管理员工作区"><button type="button" className={!performanceMode && workspace === 'organization' ? 'is-active' : ''} onClick={() => { setWorkspace('organization'); onOpenOrganization(); }}>组织架构</button><button type="button" className={performanceMode ? 'is-active' : ''} onClick={onOpenPerformanceOverview}>绩效总览</button><button type="button" className={!performanceMode && workspace === 'news' ? 'is-active' : ''} onClick={() => { setWorkspace('news'); onOpenOrganization(); }}>首页与新闻</button><button type="button" className={!performanceMode && workspace === 'audit' ? 'is-active' : ''} onClick={() => { setWorkspace('audit'); onOpenOrganization(); }}>账号日志</button></div>
+          <section className="siehub-organization-host">{performanceMode ? <UltimatePerformanceOverview token={token} onOpenDepartment={onOpenDepartment} onOpenOrganization={onOpenOrganization} /> : workspace === 'audit' ? <AccountAuditPanel token={token} /> : workspace === 'news' ? <HeroNewsManagement token={token} /> : <OrganizationFrameworkPanel token={token} />}</section>
         </>
       ) : (
         <section className="siehub-access-denied">
@@ -4398,7 +4402,7 @@ const SIEBridgeWindow = ({ user, token, theme, onBack, onOpenMy, onLogout, langu
     <main className="siehub-shell siebridge-window">
       <header className="siehub-topbar">
         <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siebridgeLogo} alt="SIEBridge" /><i></i></span><div><strong>SIEBridge</strong><small>COURSE RESOURCE PLATFORM</small></div></div>
-        <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} /><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
+        <HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions>
       </header>
       <div className="siehub-content">
         <button className="siehub-back" type="button" onClick={onBack}><ChevronLeft />返回 SIEHUB</button>

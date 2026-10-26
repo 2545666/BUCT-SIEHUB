@@ -5108,7 +5108,7 @@ app.post('/api/auth/avatar', authenticate, avatarUpload.single('avatar'), async 
   }
 });
 
-app.get('/api/my/login-logs', authenticate, async (req, res) => {
+app.get('/api/my/login-logs', authenticate, ultimateOnly, async (req, res) => {
   try {
     if (!canUseSensitiveSecurityTools(req.user)) {
       return res.status(403).json({ success: false, message: '当前身份不能查看登录日志' });
@@ -5136,6 +5136,30 @@ app.get('/api/my/login-logs', authenticate, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: '获取登录日志失败' });
+  }
+});
+
+app.get('/api/ultimate/account-logs', authenticate, ultimateOnly, async (req, res) => {
+  try {
+    const kind = req.query.kind || 'login';
+    if (!['login', 'operation'].includes(kind)) return res.status(400).json({ success: false, message: '日志类型无效' });
+    const { page, limit } = paginationOf(req.query);
+    const search = String(req.query.search || '').trim().slice(0, 100);
+    let query = {};
+    if (search) {
+      const pattern = new RegExp(escapeRegExp(search), 'i');
+      const users = await User.find({ $or: [{ name: pattern }, { studentId: pattern }] }).select('_id').lean();
+      query = kind === 'login' ? { $or: [{ user: { $in: users.map(user => user._id) } }, { studentId: pattern }] } : { user: { $in: users.map(user => user._id) } };
+    }
+    const model = kind === 'login' ? LoginEvent : AuditLog;
+    const [logs, total] = await Promise.all([
+      model.find(query).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).populate('user', 'name studentId identityLabel').lean(),
+      model.countDocuments(query)
+    ]);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, logs, pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: '获取账号日志失败' });
   }
 });
 

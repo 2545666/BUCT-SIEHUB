@@ -1,0 +1,160 @@
+/* Compact navigation and account tasks across the shared hub surfaces. */
+.hub-header-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.hub-menu-toggle { display: none; }
+.siehub-user-identity { display: grid; gap: 4px; min-width: 0; }
+.siehub-user-identity .role-pill { justify-self: start; font-size: 11px; line-height: 1.4; padding: 2px 6px; }
+.siehub-shell .siehub-home-performance { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 20px 24px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); box-shadow: none; }
+.siehub-home-performance .siehub-home-performance-heading { margin: 0; gap: 12px; }
+.siehub-home-performance h2 { font-size: 18px; line-height: 1.5; }
+.siehub-home-performance p { font-size: 13px; }
+.siehub-home-performance .siehub-home-performance-actions { display: flex; align-items: center; gap: 16px; }
+.siehub-home-performance-actions label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.siehub-home-performance-actions select { min-height: 44px; max-width: 100%; padding: 8px 30px 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--paper); font: inherit; font-size: 16px; }
+.siehub-home-performance-actions .performance-department-name { color: var(--muted); font-size: 14px; }
+.siehub-home-performance .siehub-home-performance-actions button { justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 6px; font-size: 14px; gap: 8px; white-space: nowrap; }
+.hub-overview-entry { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px 20px; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); text-align: left; cursor: pointer; }
+.hub-overview-entry > svg { width: 22px; color: var(--theme-primary); }
+.hub-overview-entry > svg:last-child { margin-left: auto; }
+.hub-overview-entry span { display: grid; gap: 4px; }
+.hub-overview-entry strong { font-size: 16px; }
+.hub-overview-entry small { color: var(--muted); font-size: 12px; }
+.siehub-my-shell .siehub-content { max-width: 760px; }
+.siehub-my-shell .siehub-my-hero { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 16px; padding: 24px 0; margin: 0 0 16px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none !important; color: var(--ink); box-shadow: none; min-height: 0; }
+.siehub-my-shell .siehub-my-avatar { width: 64px; height: 64px; flex-shrink: 0; font-size: 24px; }
+.siehub-my-shell .account-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; flex: 1; }
+.siehub-my-shell .account-summary h1 { margin: 0; color: var(--ink); font-size: 22px; line-height: 1.4; overflow-wrap: anywhere; }
+.siehub-my-shell .account-summary > span { width: 100%; color: var(--muted); font-size: 13px; }
+.siehub-my-shell .account-summary .role-pill { font-size: 11px; padding: 3px 7px; }
+.siehub-my-shell .siehub-avatar-upload { position: relative; display: inline-flex; justify-content: center; align-items: center; min-height: 44px; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--paper); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.siehub-my-shell .siehub-avatar-upload svg { width: 18px; height: 18px; }
+.siehub-my-shell .siehub-avatar-upload span { color: inherit; }
+.siehub-my-shell .siehub-avatar-upload input { display: block; position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.siehub-avatar-upload:focus-within { outline: 2px solid var(--theme-primary); outline-offset: 2px; }
+.account-section-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.account-section-tabs button { flex: 1; min-height: 44px; padding: 10px 6px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font: inherit; font-size: 14px; cursor: pointer; }
+.account-section-tabs button[aria-pressed="true"] { color: var(--theme-primary); border-bottom-color: var(--theme-primary); font-weight: 600; }
+.siehub-my-shell .siehub-my-grid { display: block; }
+.siehub-my-shell .siehub-my-card { display: block; padding: 24px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); box-shadow: none; }
+.siehub-my-card[hidden] { display: none !important; }
+.siehub-my-shell .siehub-my-card-head { margin-bottom: 20px; gap: 10px; }
+.siehub-my-shell .siehub-my-card-head h2 { font-size: 17px; margin: 0; }
+.siehub-my-shell .siehub-my-card-head p { font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
+.siehub-my-shell .siehub-my-card > label { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.siehub-my-shell .siehub-my-card input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); padding: 10px 12px; font: inherit; font-size: 16px; font-weight: 400; }
+.siehub-my-shell .siehub-my-card input[readonly] { color: var(--muted); border-color: transparent; background: transparent; }
+.siehub-my-shell .siehub-my-card > button { min-height: 44px; margin-top: 20px; font-size: 14px; }
+.account-preferences { margin-top: 24px; display: grid; border-top: 1px solid var(--line); }
+.account-preferences button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 4px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.account-preferences svg { width: 18px; height: 18px; }
+.account-preferences svg:last-child { margin-left: auto; }
+.account-audit { padding: 20px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+.account-audit h2 { font-size: 20px; margin: 0; }
+.account-audit > p { font-size: 14px; color: var(--muted); }
+.account-audit button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--paper); cursor: pointer; font-size: 14px; }
+.account-audit button:disabled { opacity: .5; cursor: default; }
+.account-audit-tabs, .account-audit-pages { display: flex; gap: 8px; align-items: center; }
+.account-audit-tabs button[aria-pressed="true"] { color: var(--theme-on-primary); background: var(--theme-primary); border-color: var(--theme-primary); }
+.account-audit-search { display: flex; align-items: end; gap: 8px; margin: 20px 0; }
+.account-audit-search label { display: grid; gap: 6px; flex: 1; min-width: 0; font-size: 13px; }
+.account-audit-search input { width: 100%; min-width: 0; min-height: 44px; padding: 10px; font-size: 16px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; }
+.account-audit-list article { padding: 16px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.account-audit-list header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.account-audit-list time, .account-audit-list small { font-size: 12px; color: var(--muted); }
+.account-audit-list summary { min-height: 44px; align-content: center; cursor: pointer; color: var(--theme-primary); }
+.account-audit-list dd { margin: 4px 0 12px; overflow-wrap: anywhere; color: var(--muted); }
+.account-audit-list pre { white-space: pre-wrap; }
+.account-audit-pages { margin-top: 20px; justify-content: center; font-size: 13px; }
+.siehub-my-shell, .siehub-my-shell :is(button, input, select), .siehub-home-performance, .siehub-home-performance :is(button, select), .account-audit, .account-audit :is(button, input) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif !important; }
+.siehub-my-shell :is(p, span, input, label), .siehub-home-performance :is(p, select, label), .account-audit :is(p, span, input, dd, time) { font-weight: 400 !important; }
+@media (max-width: 980px) {
+  .siehub-shell, .siehub-shell :is(button, input, select, textarea) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif !important; }
+  .siehub-shell :is(p, small, em, input, select, time) { font-weight: 400 !important; }
+  .siehub-shell .siehub-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; min-height: 64px; padding: 10px 14px; gap: 8px; }
+  .siehub-shell .siehub-brand { min-width: 0; flex: 0 0 auto; gap: 6px; }
+  .siehub-shell .siehub-brand-mark { width: 32px; height: 36px; }
+  .siehub-shell .siehub-brand strong { font-size: 16px; letter-spacing: .02em; }
+  .siehub-shell .siehub-brand small { display: none; }
+  .hub-header-actions { gap: 6px; min-width: 0; }
+  .siehub-shell .siehub-user-chip { display: flex; flex: 0 1 auto; width: auto; height: auto; justify-content: flex-start; border-radius: 0; gap: 7px; padding: 0; background: none; border: 0; min-width: 0; }
+  .siehub-shell .siehub-user-chip .siehub-avatar { width: 32px; height: 32px; flex: 0 0 32px; font-size: 14px; }
+  .siehub-shell .siehub-user-chip > .siehub-user-identity { display: grid; gap: 3px; max-width: 136px; }
+  .siehub-shell .siehub-user-identity > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.4; }
+  .siehub-shell .siehub-user-identity .role-pill { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; padding: 1px 5px; }
+  .hub-menu-toggle { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; }
+  .hub-menu-toggle svg { width: 21px; height: 21px; }
+  .siehub-shell .hub-header-tools { display: none; position: absolute; top: 66px; right: 12px; width: min(300px, calc(100vw - 24px)); max-height: calc(100dvh - 150px); overflow-y: auto; padding: 12px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 30px rgba(15,23,42,.15); z-index: 100; }
+  .siehub-shell .hub-header-tools.is-open { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+  .siehub-shell .hub-header-tools :is(.icon-button, .siehub-topbar-link) { display: flex; justify-content: flex-start; gap: 12px; width: 100%; min-height: 44px; border: 0; border-radius: 6px; padding: 10px; font-size: 14px; background: transparent; color: var(--ink); }
+  .hub-header-tools .icon-button::after { content: attr(title); }
+  .siehub-shell .hub-header-tools .theme-mode-icons { display: none; }
+  .siehub-shell .hub-header-tools .language-switcher { display: flex; }
+  .siehub-shell .siehub-content { width: calc(100% - 28px); padding: 16px 0 24px; }
+  .siehub-shell .siehub-home-performance { flex-direction: column; align-items: stretch; gap: 14px; padding: 16px; }
+  .siehub-home-performance h2 { font-size: 16px; }
+  .siehub-home-performance-heading > svg { width: 22px; height: 22px; }
+  .siehub-home-performance p { font-size: 12px; }
+  .siehub-home-performance .siehub-home-performance-actions { justify-content: space-between; gap: 10px; }
+  .siehub-home-performance-actions label { flex: 1; min-width: 0; }
+  .siehub-home-performance-actions label > span { display: none; }
+  .siehub-home-performance-actions select { width: 100%; font-size: 14px; }
+  .siehub-home-performance .siehub-home-performance-actions button { padding: 10px 12px; }
+  .siehub-shell .siehub-product-windows { margin: 20px 0; }
+  .siehub-shell .siehub-product-windows:first-child { margin-top: 0; }
+  .siehub-shell .siehub-group-heading { gap: 8px; margin-bottom: 12px; }
+  .siehub-shell .siehub-group-heading h2 { font-size: 17px; line-height: 1.4; }
+  .siehub-shell .siehub-group-heading p, .siehub-shell .siehub-group-heading > span { display: none; }
+  .siehub-shell .siehub-product-window-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .siehub-shell .siehub-product-window { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 112px; padding: 14px; gap: 8px; border-radius: 10px; box-shadow: none; }
+  .siehub-shell .siehub-product-window::before, .siehub-shell .siehub-product-window::after { display: none; }
+  .siehub-shell .siehub-product-window-mark { width: 30px; height: 30px; }
+  .siehub-shell .siehub-product-window-copy strong { font-size: 15px; line-height: 1.4; }
+  .siehub-shell .siehub-product-window-copy em, .siehub-shell .siehub-product-window-action { display: none; }
+  .siehub-shell .siehub-home-status { gap: 5px 10px; padding: 12px 0; font-size: 13px; }
+  .siehub-shell .siehub-home-status strong { font-size: 14px; }
+  .siehub-shell .siehub-home-status small { font-size: 11px; }
+  .siehub-shell .siehub-school-notice-head { padding: 14px; }
+  .siehub-shell .siehub-school-notice-head h2 { font-size: 17px; }
+  .siehub-shell .siehub-school-notice-head p { display: none; }
+  .siehub-shell .siehub-school-notice-filters { padding: 10px 12px; gap: 8px; }
+  .siehub-shell .siehub-school-notice-center { margin-top: 16px; }
+  .siehub-shell .siehub-school-panel-heading h3 { font-size: 16px; }
+  .siehub-shell .siehub-department-strip { margin-top: 20px; padding: 16px; }
+  .siehub-shell .siehub-department-strip-row { padding: 14px 0; }
+  .siehub-shell .siehub-department-strip-row > span { display: none; }
+  .siehub-shell .siehub-department-strip-row > strong { font-size: 14px; }
+  .siehub-shell .siehub-department-chip { min-height: 44px; padding: 8px; gap: 6px; font-size: 12px; }
+  .siehub-shell .siehub-department-chip i { width: 22px; height: 22px; }
+  .siehub-shell .siehub-department-chip > svg { width: 14px; height: 14px; }
+  .siehub-shell .siehub-section-link { font-size: 12px; padding: 8px; min-height: 44px; }
+  .siehub-shell .siehub-back { margin: 0 0 12px; font-size: 13px; }
+  .siehub-shell .siehub-directory-hero { padding: 16px 0; gap: 12px; margin-bottom: 20px; border: 0; background: none; box-shadow: none; }
+  .siehub-shell .siehub-directory-hero h1 { margin: 0; font-size: 22px; }
+  .siehub-shell .siehub-directory-hero p, .siehub-shell .siehub-directory-hero div > span { display: none; }
+  .siehub-shell .siehub-directory-hero > .siehub-module-icon { width: 36px; height: 36px; }
+  .siehub-shell .siehub-directory-group { margin-top: 22px; }
+  .siehub-shell .siehub-directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .siehub-shell .siehub-directory-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 8px; padding: 14px 12px; min-height: 128px; border-radius: 10px; }
+  .siehub-shell .siehub-directory-card::before, .siehub-shell .siehub-directory-index, .siehub-shell .siehub-directory-copy small, .siehub-shell .siehub-directory-action { display: none; }
+  .siehub-shell .siehub-directory-card .siehub-module-icon { width: 30px; height: 30px; }
+  .siehub-shell .siehub-directory-copy strong { font-size: 14px; line-height: 1.5; }
+  .siehub-shell .siehub-directory-copy em { font-size: 12px; line-height: 1.5; margin-top: 4px; }
+  .siehub-shell .siehub-my-hero { display: grid; grid-template-columns: 52px minmax(0, 1fr); padding: 8px 0 20px; gap: 12px; }
+  .siehub-my-shell .siehub-my-avatar { width: 52px; height: 52px; }
+  .siehub-my-shell .account-summary h1 { font-size: 18px; }
+  .siehub-my-shell .siehub-avatar-upload { grid-column: 2; justify-self: start; margin-left: 0; min-height: 44px; }
+  .siehub-my-shell .siehub-my-card { padding: 16px; }
+  .siehub-my-shell .siehub-my-card > label { grid-template-columns: 60px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+  .siehub-my-shell .siehub-my-card > button { width: 100%; }
+  .siehub-shell .siehub-mobile-dock { left: 0; right: 0; bottom: 0; transform: none; width: 100%; border-radius: 0; border: 0; border-top: 1px solid var(--line); padding: 4px 12px max(4px, env(safe-area-inset-bottom)); gap: 4px; background: var(--paper); box-shadow: none; }
+  .siehub-shell .siehub-mobile-dock button { min-height: 50px; padding: 6px; border-radius: 8px; gap: 3px; font-size: 11px; }
+  .siehub-shell .siehub-mobile-dock button svg { width: 20px; height: 20px; }
+  .siehub-shell .siehub-mobile-dock button.is-active { color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 9%, var(--paper)); box-shadow: none; }
+  .siehub-shell .siehub-portal-switch { flex-wrap: wrap; }
+  .siehub-shell .siehub-portal-switch button { flex: 1 0 auto; }
+  .account-audit { padding: 14px; }
+}
+@media (max-width: 360px) {
+  .siehub-shell .siehub-brand strong { display: none; }
+  .siehub-shell .siehub-user-chip > .siehub-user-identity { max-width: 160px; }
+  .siehub-shell .siehub-product-window-copy strong { font-size: 14px; }
+}

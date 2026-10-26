@@ -28,13 +28,14 @@ const path = require('node:path');
         const section = page.getByRole('region', { name: '部门绩效管理', exact: true });
         assert.equal(await section.count(), member ? 0 : 1);
         if (!member) {
-          assert.equal(await section.getByRole('button').count(), allowed.length);
+          assert.equal(await section.getByRole('button').count(), allowed.length ? 1 : 0);
           assert.ok((await section.boundingBox()).y < 300, 'entry must be near the top');
-          if (!allowed.length) await section.getByText(/暂未配置可管理的部门/).waitFor();
+          if (!allowed.length) await section.getByText(/尚未配置分管部门/).waitFor();
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
           await page.screenshot({ path: path.join(__dirname, 'browser', `home-entry-${position}-${width}.png`) });
           for (let index = 0; index < allowed.length; index++) {
-            const button = section.getByRole('button').nth(index);
+            if (allowed.length > 1) await section.getByRole('combobox').selectOption(user.managedDepartments[index].department);
+            const button = section.getByRole('button');
             assert.ok((await button.boundingBox()).height >= 44);
             await button.click();
             await page.getByRole('tablist', { name: '绩效内容' }).waitFor();
