@@ -3823,8 +3823,10 @@ const SIEHUBHomeNotificationCenter = ({ token, onOpenSIEVOX }) => {
   );
 };
 
-const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpenSIEVOX, onOpenSIEBridge, onOpenUltimate, onOpenPerformanceOverview, onOpenMy, onLogout, language = 'zh', languageSwitcher = null }) => {
+const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpenSIEVOX, onOpenSIEBridge, onOpenUltimate, onOpenPerformanceOverview, onOpenDepartmentPerformance, onOpenMy, onLogout, language = 'zh', languageSwitcher = null }) => {
   const modules = getAccessibleModules(user);
+  const showPerformanceManagement = !user?.isUltimateAdmin && user?.role === 'superadmin' && ['department_head', 'youth_league_cadre', 'presidium_member', 'youth_league_deputy_secretary'].includes(user?.positionTitle);
+  const performanceModules = modules.filter(module => getModuleAccess(user, module)?.capabilities?.includes('manage_department_performance'));
   const clock = usePlatformClock(language);
   const serviceMetrics = useServiceMetrics(token);
   const [wechatNewsRefreshKey, setWechatNewsRefreshKey] = useState(0);
@@ -3894,6 +3896,10 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
       <div className="siehub-topbar-actions"><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><HubUserChip user={user} />{user?.isUltimateAdmin && <><button className="siehub-topbar-link" type="button" onClick={onOpenUltimate}><ShieldCheck />平台管理</button><button className="icon-button siehub-wechat-import-trigger" type="button" onClick={openWechatManualImport} title="公众号导入"><Plus /></button></>}<SIEHUBHomeNotificationCenter token={token} onOpenSIEVOX={onOpenSIEVOX} /><button className="siehub-topbar-link" type="button" onClick={onOpenDepartments}><Building2 />部门</button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</div>
     </header>
     <div className="siehub-content">
+      {showPerformanceManagement && <section className="siehub-home-performance" aria-labelledby="home-performance-title">
+        <div className="siehub-home-performance-heading"><Trophy aria-hidden="true" /><div><h2 id="home-performance-title">部门绩效管理</h2><p>录入日常绩效、开展学期评价、查看成绩与排名</p></div></div>
+        {performanceModules.length ? <div className="siehub-home-performance-actions">{performanceModules.map(module => <button type="button" key={module.key} onClick={() => onOpenDepartmentPerformance(module.key)}><span>{module.title}</span><span>进入管理 <ArrowRight aria-hidden="true" /></span></button>)}</div> : <p>暂未配置可管理的部门，请联系终极管理员设置分管范围。</p>}
+      </section>}
       <section className="siehub-product-windows" aria-label="SIEHUB 平台入口">
         <div className="siehub-group-heading"><div><h2>学生服务</h2></div></div>
         <div className="siehub-product-window-grid">
@@ -5125,7 +5131,7 @@ export default function App() {
   let content;
   if (!user && token) content = <main className="auth-session-status"><p role="status">{authError || '正在验证登录…'}</p>{authError && <button type="button" onClick={refreshUser}>重新连接</button>}<button type="button" onClick={logout}>退出登录</button></main>;
   else if (!user) content = <LoginPage onLogin={login} onRegister={register} theme={theme} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
-  else if (appSurface === 'hub') content = <SIEHUBHome user={user} token={token} theme={theme} onOpenModule={openModule} onOpenDepartments={openDepartments} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenUltimate={openUltimate} onOpenPerformanceOverview={openPerformanceOverview} onOpenMy={openMy} onLogout={logout} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
+  else if (appSurface === 'hub') content = <SIEHUBHome user={user} token={token} theme={theme} onOpenModule={openModule} onOpenDepartments={openDepartments} onOpenSIEVOX={openSIEVOX} onOpenSIEBridge={openSIEBridge} onOpenUltimate={openUltimate} onOpenPerformanceOverview={openPerformanceOverview} onOpenDepartmentPerformance={openDepartmentPerformance} onOpenMy={openMy} onLogout={logout} language={languageTools.language} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'departments') content = <SIEHUBDepartmentDirectory user={user} theme={theme} onBack={() => setAppSurface('hub')} onOpenModule={openModule} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'my') content = <MyProfileWindow user={user} token={token} theme={theme} onBack={() => setAppSurface('hub')} onOpenDepartments={openDepartments} onOpenMy={openMy} onLogout={logout} onRefreshUser={refreshUser} languageSwitcher={renderLanguageSwitcher()} />;
   else if (appSurface === 'ultimateOrganization' || appSurface === 'ultimatePerformance') content = <UltimateOrganizationWindow user={user} token={token} theme={theme} performanceMode={appSurface === 'ultimatePerformance'} onOpenPerformanceOverview={openPerformanceOverview} onOpenOrganization={openUltimate} onOpenDepartment={openDepartmentPerformance} onBack={() => setAppSurface('hub')} onOpenMy={openMy} onLogout={logout} languageSwitcher={renderLanguageSwitcher()} />;

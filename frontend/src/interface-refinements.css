@@ -13,6 +13,17 @@ html[data-color="green"] { --theme-primary: #36762f; }
 .siehub-product-window-index, .siehub-product-window-copy small { display: none; }
 .siehub-product-window { min-height: 140px; }
 .siehub-product-window-copy strong { font-size: 22px; }
+.siehub-home-performance { padding: 24px; border: 1px solid var(--theme-primary); border-radius: 12px; background: var(--paper); color: var(--ink); }
+.siehub-home-performance-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.siehub-home-performance-heading > svg { width: 28px; height: 28px; flex-shrink: 0; color: var(--theme-primary); }
+.siehub-home-performance h2 { margin: 0; font-size: 24px; }
+.siehub-home-performance p { margin: 6px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.siehub-home-performance-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.siehub-home-performance-actions button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 14px 18px; border: 0; border-radius: 8px; background: var(--theme-primary); color: var(--theme-on-primary); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
+.siehub-home-performance-actions button > span:last-child { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 14px; font-weight: 400; }
+.siehub-home-performance-actions svg { width: 18px; height: 18px; }
+.siehub-home-performance-actions button:hover { filter: brightness(.92); }
+@media (max-width: 640px) { .siehub-home-performance { padding: 18px; }.siehub-home-performance h2 { font-size: 22px; }.siehub-home-performance-actions button { padding: 14px 12px; } }
 .siehub-home-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; padding: 16px 0; color: var(--ink); }
 .siehub-home-status small { color: var(--muted); font-size: 12px; }
 .unified-performance-selectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
