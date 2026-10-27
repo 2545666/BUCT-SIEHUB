@@ -64,10 +64,8 @@
 .account-audit-list dd { margin: 4px 0 12px; overflow-wrap: anywhere; color: var(--muted); }
 .account-audit-list pre { white-space: pre-wrap; }
 .account-audit-pages { margin-top: 20px; justify-content: center; font-size: 13px; }
-.siehub-my-shell, .siehub-my-shell :is(button, input, select), .siehub-home-performance, .siehub-home-performance :is(button, select), .account-audit, .account-audit :is(button, input) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif !important; }
 .siehub-my-shell :is(p, span, input, label), .siehub-home-performance :is(p, select, label), .account-audit :is(p, span, input, dd, time) { font-weight: 400 !important; }
 @media (max-width: 980px) {
-  .siehub-shell, .siehub-shell :is(button, input, select, textarea) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif !important; }
   .siehub-shell :is(p, small, em, input, select, time) { font-weight: 400 !important; }
   .siehub-shell .siehub-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; min-height: 64px; padding: 10px 14px; gap: 8px; }
   .siehub-shell .siehub-brand { min-width: 0; flex: 0 0 auto; gap: 6px; }

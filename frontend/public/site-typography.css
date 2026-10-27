@@ -1,0 +1,15 @@
+@import url('./fonts/noto-serif-sc/index.css');
+
+:root {
+  --font-site-serif: "Noto Serif SC Variable", "Songti SC", "STSong", "SimSun", serif;
+}
+
+/* One family for desktop, mobile, controls and lazy-loaded workspaces.
+   Mathematical notation keeps its required symbol fonts. */
+html:root,
+html:root body,
+html:root body :not(.katex, .katex *),
+html:root body :not(.katex, .katex *)::before,
+html:root body :not(.katex, .katex *)::after {
+  font-family: var(--font-site-serif) !important;
+}
