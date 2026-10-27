@@ -51,11 +51,21 @@ const results = [];
    await page.screenshot({ path: path.join(out, name + '.png') }).catch(() => {});
   } finally { await context.close(); fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2)); }
  }
- for (const width of [390, 1440]) await scenario('overview-' + width, 'ultimate', width, async (page, writes, reads) => {
+ for (const width of [320, 390, 1440]) await scenario('overview-' + width, 'ultimate', width, async (page, writes, reads) => {
   await page.clock.install();
   await page.goto('http://127.0.0.1:5174/performance-overview', { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: '全部门绩效总览' }).waitFor();
   assert.equal(await page.locator('.performance-overview-department').count(), 9);
+  assert.equal(await page.locator('.performance-overview-review p').count(), 0);
+  assert.equal(await page.getByText(/不代表所有评价人|不合并成绩/).count(), 0);
+  if (width < 600) {
+    assert.ok(await page.locator('.siehub-ultimate-hero h1').evaluate(element => parseFloat(getComputedStyle(element).fontSize) <= 22));
+    assert.ok(await page.locator('.performance-overview').evaluate(element => parseFloat(getComputedStyle(element).fontSize) <= 14));
+    assert.ok((await page.locator('.performance-overview-review').boundingBox()).height < 80);
+    assert.ok((await page.locator('.performance-overview-department').first().boundingBox()).height < 160);
+    assert.ok((await page.locator('.performance-overview-primary').boundingBox()).height >= 44);
+  }
+  await page.screenshot({ path: path.join(out, `overview-compact-${width}.png`) });
   await page.locator('.performance-overview-department').filter({ hasText: '学生权益部' }).click();
   await page.locator('.performance-overview-member summary').filter({ hasText: '兼职示例志愿者' }).click();
   await page.getByText('校园活动协助 · 3 分', { exact: true }).waitFor();

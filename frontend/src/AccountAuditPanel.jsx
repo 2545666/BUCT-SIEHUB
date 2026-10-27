@@ -22,7 +22,7 @@ export default function AccountAuditPanel({ token }) {
     return () => { active = false; };
   }, [token, kind, search, page, reload]);
   return <section className="account-audit" aria-label="账号日志管理">
-    <h2>账号日志</h2><p>全员登录与操作记录，仅终极管理员可查看。</p>
+    <h2>账号日志</h2>
     <div className="account-audit-tabs">{[['login', '登录记录'], ['operation', '操作记录']].map(([key, label]) => <button key={key} type="button" aria-pressed={kind === key} onClick={() => { setKind(key); setPage(1); }}>{label}</button>)}</div>
     <form className="account-audit-search" onSubmit={event => { event.preventDefault(); setSearch(input.trim()); setPage(1); setReload(value => value + 1); }}>
       <label><span>姓名或学号</span><input value={input} onChange={event => setInput(event.target.value)} placeholder="搜索所有账号" maxLength={100} /></label><button type="submit" disabled={loading}>查询</button><button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>刷新</button>

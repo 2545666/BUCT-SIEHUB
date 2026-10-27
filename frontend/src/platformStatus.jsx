@@ -113,7 +113,7 @@ export const ServiceHealthNote = ({ metrics, loading, error, language = 'zh' }) 
     ? (isEnglish
       ? `${metrics.respondedFeedbackCount || 0} measured / ${metrics.feedbackCount || 0} total`
       : `${metrics.respondedFeedbackCount || 0} 条已计入 / 共 ${metrics.feedbackCount || 0} 条`)
-    : (isEnglish ? 'Waiting for backend data' : '等待后端数据');
+    : (isEnglish ? 'Loading data' : '正在加载数据');
 
   return (
     <div className="service-note">

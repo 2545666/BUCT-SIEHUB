@@ -23,9 +23,9 @@ function EvaluationForm({ target, kind, previous, semester, busy, onSubmit }) {
     event.preventDefault();
     onSubmit({ targetId: target.id, kind, semester, items: rubric.map(item => ({ key: item.key, score: Number(scores[item.key]) })), bonusScore, bonusReason, comment });
   }}>
-    <p>逐项填写本学期实际表现，系统自动换算为百分制。{activity ? '本部门日常记录已预填到相应维度，请核对后评分。' : '只评价实际了解的工作。'}</p>
+    {activity && <p>已按日常记录预填，请核对分数。</p>}
     {rubric.map(item => <label key={item.key}>{item.label} · 满分 {item.max}<input type="number" min="0" max={item.max} step="0.5" required value={scores[item.key] ?? ''} onChange={event => setScores({ ...scores, [item.key]: event.target.value })} />{item.description && <small>{item.description}</small>}</label>)}
-    {kind === 'leader_volunteer' && target.bonusItem && <><label>{target.bonusItem.label} · 额外加分<input type="number" min="0" max={target.bonusItem.maxScore ?? undefined} step="0.5" value={bonusScore} onChange={event => setBonusScore(event.target.value)} /></label><label>加分依据<input maxLength="500" required={Number(bonusScore) > 0} value={bonusReason} onChange={event => setBonusReason(event.target.value)} /></label><small>额外加分由上级评分人认定，在 70／10／20 合成后计入学期总分。</small></>}
+    {kind === 'leader_volunteer' && target.bonusItem && <><label>{target.bonusItem.label} · 额外加分<input type="number" min="0" max={target.bonusItem.maxScore ?? undefined} step="0.5" value={bonusScore} onChange={event => setBonusScore(event.target.value)} /></label><label>加分依据<input maxLength="500" required={Number(bonusScore) > 0} value={bonusReason} onChange={event => setBonusReason(event.target.value)} /></label><small>额外加分计入学期总分。</small></>}
     <label className="unified-performance-comment">评价依据与意见<textarea rows="3" maxLength="2000" value={comment} onChange={event => setComment(event.target.value)} /></label>
     <div>分项合计：<strong>{total == null ? '待填写' : `${total.toFixed(1)} 分`}</strong></div>
     <button className="siehub-wide-action" type="submit" disabled={busy || !filled}>{busy ? '保存中…' : previous ? '更新本学期评价' : '提交本学期评价'}</button>
@@ -92,16 +92,16 @@ export default function DepartmentPerformanceParticipation({ module, token, user
         {(data?.ownActivityRecords || []).length ? data.ownActivityRecords.map(record => <p key={record.id}><strong>{record.activityName || '日常事项'} · +{record.score}</strong><br />{record.reason}</p>) : <p>本部门本学期暂无日常记录。</p>}
       </details>
       <div className="siehub-performance-grid">
-        <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>01</span><div><h4>学期末逐项评价</h4><p>负责人、分管主席团可评价志愿者；分管主席团评价负责人。两类成员均可自评，志愿者可评价本部门负责人。兼职成员仅针对当前部门评分。</p><p>多人上级评分取平均，计入 70% 主项；自评占 10%，同伴评价占 20%。归档后只读。</p></div></div>
+        <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>01</span><div><h4>学期末逐项评价</h4></div></div>
           {semester === data?.currentSemester && data?.reviewOpen && targets.length ? <>
             <div className="unified-performance-selectors">
               <label>评价对象<select aria-label="评价对象" value={selectedTarget?.id || ''} onChange={event => { setTargetId(event.target.value); setKind(''); }}>{targets.map(item => <option key={item.id} value={item.id}>{item.name} · {item.memberRole === 'volunteer' ? '志愿者' : '负责人'}</option>)}</select></label>
               <label>评价类型<select aria-label="评价类型" value={selectedKind} onChange={event => setKind(event.target.value)}>{(selectedTarget?.allowedKinds || []).map(value => <option key={value} value={value}>{LABELS[value] || value}</option>)}</select></label>
             </div>
             {selectedTarget && selectedKind && <EvaluationForm key={`${scope}-${semester}-${selectedTarget.id}-${selectedKind}-${previous?.id || ''}`} target={selectedTarget} kind={selectedKind} previous={previous} semester={semester} busy={saving || loading} onSubmit={submit} />}
-          </> : <p className="siehub-empty-text">{semester !== data?.currentSemester ? '历史学期只读，成绩随届次归档保存。' : !data?.reviewOpen ? '学期末评价尚未开放，开放后可逐项填写。' : '当前身份暂无可评价对象。'}</p>}
+          </> : <p className="siehub-empty-text">{semester !== data?.currentSemester ? '历史学期 · 只读' : !data?.reviewOpen ? '期末评价未开放' : '当前身份暂无可评价对象。'}</p>}
         </section>
-        <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>02</span><div><h4>学期成绩</h4><p>缺少上级评分、自评或互评时显示待完成，不临时重分配权重。</p></div></div>
+        <section className="siehub-performance-panel"><div className="siehub-performance-panel-head"><span>02</span><div><h4>学期成绩</h4></div></div>
           {manager && <div className="unified-performance-ranking"><h5>志愿者排名 · 已完成学期总分</h5>{ranking.length ? <ol>{ranking.map((item, index) => <li key={item.target.id}><span>{index + 1}. {item.target.name}</span><b>{item.total.toFixed(1)} 分</b></li>)}</ol> : <p>暂无已完成成绩。</p>}</div>}
           {visible.length ? <div className="unified-performance-summary">{[...volunteers, ...leaders].map(item => <article key={item.target.id}><strong>{item.target.name} <em>{item.target.memberRole === 'volunteer' ? '志愿者' : '负责人'}</em></strong><div><span>学期总分：{item.total == null ? '待完成' : item.total.toFixed(1)}</span><span>上级 {item.supervisor ?? '—'} · 自评 {item.self ?? '—'} · 互评 {item.peer ?? '—'}{item.bonus > 0 ? ` · 额外 +${item.bonus}` : ''}</span></div>{item.dimensions?.length > 0 && <details><summary>查看主项雷达图</summary><PerformanceDimensionRadar dimensions={item.dimensions} label={`${item.target.name}学期绩效`} /></details>}</article>)}</div> : <p className="siehub-empty-text">本学期暂无可查看的成绩。</p>}
         </section>

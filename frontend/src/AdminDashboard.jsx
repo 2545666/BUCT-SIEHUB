@@ -633,9 +633,6 @@ export const OrganizationFrameworkPanel = ({ token }) => {
           <div>
             <p className="text-sm text-purple-200/60 font-medium">终极管理员 · 组织框架</p>
             <h2 className="mt-2 text-2xl md:text-4xl font-black text-white tracking-tight">团委学生会架构</h2>
-            <p className="organization-description mt-3 max-w-3xl text-sm md:text-base leading-7 text-purple-100/70">
-              团委与学生会分开管理，主席团成员 / 团委学生兼职副书记可分管多个部门，部门负责人层级只拥有对应部门权限。
-            </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
@@ -796,7 +793,6 @@ export const OrganizationFrameworkPanel = ({ token }) => {
             )}
             {memberForm.memberRole === 'volunteer' && <fieldset className="md:col-span-2 rounded-xl border border-white/10 p-3">
               <legend>兼职部门，可多选</legend>
-              <p className="text-sm">同一账号在各部门分别录入、评价和归档绩效。上方保留主要所属部门。</p>
               <div className="flex flex-wrap gap-2">{DEPARTMENT_OPTIONS.filter(item => item.organization !== memberForm.organization || item.department !== memberForm.department).map(item => {
                 const checked = memberForm.volunteerDepartments.some(current => current.organization === item.organization && current.department === item.department);
                 return <button type="button" key={`${item.organization}:${item.department}`} aria-pressed={checked} disabled={isArchivedCohort} className={`px-3 py-2 rounded-lg border text-sm ${checked ? 'bg-purple-600 text-white' : 'bg-white/5 text-purple-100'}`} onClick={() => setMemberForm(current => ({ ...current, volunteerDepartments: checked ? current.volunteerDepartments.filter(value => value.organization !== item.organization || value.department !== item.department) : [...current.volunteerDepartments, { organization: item.organization, department: item.department }] }))}>{item.organizationLabel} · {item.departmentLabel}</button>;
@@ -1177,7 +1173,6 @@ const AccountManagement = ({ token, user: currentUser }) => {
       <section className="people-command">
         <div>
           <h2>人员与权限</h2>
-          <p>统一管理学生、志愿者、部门负责人/团委学生兼职团干部，以及主席团/团委学生兼职副书记的账号入口。</p>
         </div>
         <form onSubmit={handlePromote} className="people-actions">
           <label className="search-field"><span>⌕</span><input type="text" value={targetStudentId} onChange={(e) => setTargetStudentId(e.target.value)} placeholder="输入学号升级为志愿者" required /></label>
@@ -1578,7 +1573,6 @@ const AdminQuickFeedbackPage = ({ token, onBackToFeedback, onSubmitted }) => {
         <div className="queue-toolbar">
           <div>
             <h2>发起反馈</h2>
-            <span>以当前账号提交问题反馈，提交后可在业务反馈中跟进处理记录。</span>
           </div>
         </div>
         <div className="admin-quick-feedback-grid">
@@ -1634,14 +1628,13 @@ const AdminServiceGuidePage = ({ onBackToFeedback }) => (
       <div className="queue-toolbar">
         <div>
           <h2>服务指南</h2>
-          <span>用于说明学生权益反馈系统的受理范围、处理时效和材料规范。</span>
         </div>
       </div>
       <div className="guide-grid admin-guide-grid">
         <section><h2>反馈如何流转</h2><p>提交后由学生权益部先行受理，确认问题类别、紧急程度和是否需要补充材料，再分派给对应负责人或协同部门。</p></section>
         <section><h2>响应时效</h2><p>普通事项原则上 1 个工作日内首次响应；涉及跨部门核实、场地维修、制度咨询等事项，会在详情页持续同步进展。</p></section>
         <section><h2>紧急事项</h2><p>涉及人身安全、突发疾病、火情、重大设备风险时，请优先联系学院老师、楼宇值班或校园应急渠道。</p></section>
-        <section><h2>材料与隐私</h2><p>支持上传图片、文档、录屏等佐证材料。匿名反馈不会向处理部门展示个人身份，但系统会保留必要审计记录。</p></section>
+        <section><h2>材料与隐私</h2><p>支持上传图片、文档、录屏等佐证材料。匿名反馈不会向处理部门展示个人身份。</p></section>
         <section><h2>补充与撤回</h2><p>事项提交后可继续补充说明、查看回复；未进入处理流程前可撤回，已处理事项会进入学期归档。</p></section>
         <section><h2>提交建议</h2><p>建议写清时间、地点、涉及对象、已尝试解决方式和期望结果。标题简洁、正文具体，会提升受理效率。</p></section>
       </div>

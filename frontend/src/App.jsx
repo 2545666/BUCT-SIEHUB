@@ -6,7 +6,7 @@ import {
   GraduationCap, House, IdCard, ImagePlus, KeyRound, LayoutDashboard, LockKeyhole,
   LogOut, MessageCircleMore, MessagesSquare, Palette, Paperclip, Plus, Send,
   ShieldCheck, Smartphone, Sparkles, SquarePen, Utensils, UserRound,
-  X, BedDouble, Eye, EyeOff, Moon, Sun, Info, Route, Clock3, PhoneCall,
+  X, BedDouble, Eye, EyeOff, Moon, Sun, Route, Clock3, PhoneCall,
   Building2, ChevronLeft, FileText, Flag, HeartHandshake, Megaphone,
   Network, Paintbrush, Scale, Trophy, UsersRound, Wrench
 } from 'lucide-react';
@@ -277,7 +277,7 @@ const EN_TRANSLATIONS = {
   '密码已重置，请使用新密码登录。': 'Password reset. Please sign in with the new password.',
   '请先阅读并勾选同意《隐私条款》后再继续。': 'Please read and agree to the Privacy Terms before continuing.',
   '两次输入的密码不一致': 'The two passwords do not match.',
-  '无法连接 SIEHUB 后端，请确认本地服务已启动。': 'Cannot connect to the SIEHUB backend. Please confirm the local service is running.',
+  '连接失败，请检查网络后重试。': 'Connection failed. Check your network and try again.',
   '一处入口，连接每一份学生工作。': 'One entry point for every student work stream.',
   '全平台治理范围': 'Full platform governance',
   '学生服务': 'Student services',
@@ -353,12 +353,12 @@ const EN_TRANSLATIONS = {
   '学生': 'Student',
   '请输入有效邮箱。': 'Please enter a valid email address.',
   '验证码发送失败': 'Failed to send the verification code.',
-  '验证码发送失败，请确认后端服务已启动。': 'Failed to send the verification code. Please confirm that the backend service is running.',
+  '验证码发送失败，请稍后重试。': 'Failed to send the code. Please try again later.',
   '验证码已发送至绑定邮箱。': 'Verification code sent to the bound email.',
   '请先输入绑定邮箱。': 'Please enter your bound email first.',
   '两次输入的新密码不一致。': 'The new passwords do not match.',
   '密码重置失败': 'Password reset failed.',
-  '密码重置失败，请确认后端服务已启动。': 'Password reset failed. Please confirm that the backend service is running.',
+  '密码重置失败，请稍后重试。': 'Password reset failed. Please try again later.',
   '学生账号学号必须为唯一的10位数字。': 'Student IDs must be unique 10-digit numbers.',
   '请输入6位邮箱验证码。': 'Please enter the 6-digit email verification code.',
   '登录失败': 'Sign-in failed',
@@ -1119,7 +1119,6 @@ const ThemePanel = ({ theme }) => (
         </div>
       </div>
     </div>
-    <p className="theme-note"><Info />外观选择会自动保存在当前浏览器中。</p>
   </aside>
 );
 
@@ -1221,7 +1220,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
       if (!data.success) setError(data.message || '验证码发送失败');
       else setEmailCodeState({ sending: false, cooldown: 60, message: data.message || '验证码已发送，请查看邮箱。' });
     } catch {
-      setError('验证码发送失败，请确认后端服务已启动。');
+      setError('验证码发送失败，请稍后重试。');
       setEmailCodeState(current => ({ ...current, sending: false }));
       return;
     }
@@ -1245,7 +1244,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
       if (!data.success) setResetState(current => ({ ...current, sending: false, error: data.message || '验证码发送失败' }));
       else setResetState({ sending: false, submitting: false, cooldown: 60, message: data.message || '验证码已发送至绑定邮箱。', error: '' });
     } catch {
-      setResetState(current => ({ ...current, sending: false, error: '验证码发送失败，请确认后端服务已启动。' }));
+      setResetState(current => ({ ...current, sending: false, error: '验证码发送失败，请稍后重试。' }));
     }
   };
 
@@ -1270,7 +1269,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
         setTimeout(() => setResetOpen(false), 900);
       }
     } catch {
-      setResetState(current => ({ ...current, submitting: false, error: '密码重置失败，请确认后端服务已启动。' }));
+      setResetState(current => ({ ...current, submitting: false, error: '密码重置失败，请稍后重试。' }));
     }
   };
 
@@ -1294,7 +1293,7 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
         alert('注册成功，请登录');
       }
     } catch {
-      setError('无法连接 SIEHUB 后端，请确认本地服务已启动。');
+      setError('连接失败，请检查网络后重试。');
     }
     setLoading(false);
   };
@@ -1388,14 +1387,6 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
           <div className="login-heading">
             <span className="login-index">01 / SIEHUB ACCESS</span>
             <h2>{isLogin ? '进入 SIEHUB' : '申请学生账号'}</h2>
-            <p>{isLogin ? '输入账号与密码，完成统一身份认证后进入 SIEHUB。' : '首次使用请完成校内身份信息登记，账号创建后从 SIEHUB 统一登录。'}</p>
-          </div>
-          <div className="unified-login-card siehub-routing-card" aria-label="SIEHUB 统一登录说明">
-            <ShieldCheck />
-            <div>
-              <strong>统一身份认证</strong>
-              <span>登录信息仅用于校内身份核验、权限确认与平台安全审计。</span>
-            </div>
           </div>
           {error && <div className="form-message">{error}</div>}
           <label className="login-field">
@@ -1434,7 +1425,6 @@ const LoginPage = ({ onLogin, onRegister, theme, language = 'zh', languageSwitch
           <button className="login-submit" type="submit" disabled={loading || !privacyAccepted}><span>{loading ? '正在验证身份…' : (isLogin ? '进入 SIEHUB' : '创建 SIEHUB 学生账号')}</span><ArrowUpRight /></button>
           <div className="login-register"><span>{isLogin ? '首次使用 SIEHUB？' : '已有账号？'}</span><button type="button" onClick={() => setIsLogin(v => !v)}>{isLogin ? '创建学生账号' : '返回登录'}</button></div>
         </form>
-        <div className="login-help"><ShieldCheck /><p><strong>SIEHUB 统一身份安全认证</strong><span>个人信息仅用于校内身份核验、部门工作协同与服务进度通知。</span></p></div>
         <footer className="login-legal">
           <span>Copyright© 2026 BUCT SIE</span>
           <a href={ICP_RECORD_URL} target="_blank" rel="noreferrer">京ICP备2026010091号-1</a>
@@ -1738,7 +1728,7 @@ const DepartmentPerformancePolicyCard = ({ module, policy, canEdit, loading, sav
           <textarea value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} rows={3} />
         </label>
         {module?.key !== 'student_rights' && <>
-          <p className="siehub-policy-formula">学期总分统一采用：上级评分 70%＋自评 10%＋互评 20%。志愿者由负责人评分，负责人由主席团评分；下方可编辑本部门维度与给分细则。</p>
+          <p className="siehub-policy-formula">学期总分：上级评分 70%＋自评 10%＋互评 20%。</p>
           <button type="button" className="outline-button" onClick={addDimension}>新增绩效板块</button>
         </>}
       </div>
@@ -2008,7 +1998,7 @@ const DepartmentPerformanceWorkbench = ({ module, token, canManage, readOnly = f
 
       <div className="siehub-performance-grid lower">
         <section className="siehub-performance-panel">
-          <div className="siehub-performance-panel-head"><span>03</span><div><h4>{targetRole === 'department_lead' ? '负责人' : '志愿者'}日常积分</h4><p>按本部门流水计算，作为期末评分依据，不直接等同学期总分。</p></div></div>
+          <div className="siehub-performance-panel-head"><span>03</span><div><h4>{targetRole === 'department_lead' ? '负责人' : '志愿者'}日常积分</h4></div></div>
           <div className="siehub-score-list">
             {scoreRows.length === 0 ? <p className="siehub-empty-text">暂无排行数据。</p> : scoreRows.map((row, index) => (
               <div key={row.user.id || row.user._id} className="siehub-score-row">
@@ -2386,7 +2376,6 @@ const DepartmentMemberWorkspace = ({ module, token, canManage, language = 'zh' }
         <div>
           <p>DEPARTMENT MEMBERS</p>
           <h2>成员管理</h2>
-          <span>仅展示本部门成员与历届归档信息；届次归档操作只保留在终极管理员端。</span>
         </div>
         <button type="button" onClick={refreshMembers} disabled={loading}>{loading ? '同步中' : '刷新'}</button>
       </div>
@@ -3633,7 +3622,7 @@ const WechatMpHeroEntry = ({
               </div>
               <button type="button" className="icon-button" onClick={onCloseManualImport}><X /></button>
             </header>
-            <p className="siehub-modal-note">一行一条，系统会尽量提取标题、摘要和封面；如果链接页受限，会返回失败结果。</p>
+            <p className="siehub-modal-note">每行填写一个文章链接。</p>
             <textarea
               className="siehub-modal-textarea"
               value={manualImportText}
@@ -3994,7 +3983,7 @@ const SIEHUBDepartmentDirectory = ({ user, theme, onBack, onOpenModule, onOpenMy
       <button className="siehub-back" type="button" onClick={onBack}><ArrowLeft /> 返回首页</button>
       <section className="siehub-directory-hero">
         <span className="siehub-module-icon tone-indigo"><Building2 /></span>
-        <div><p>SIEHUB / DEPARTMENT SHOWCASE</p><h1>部门矩阵</h1><span>按团委学生会组织架构排序，集中进入各部门宣传页、部门服务与管理工作台。</span></div>
+        <div><p>SIEHUB / DEPARTMENT SHOWCASE</p><h1>部门矩阵</h1></div>
       </section>
       {user?.isUltimateAdmin && governanceModules.length > 0 && renderDirectoryGroup('平台治理', '00', governanceModules)}
       {renderDirectoryGroup('团委', '01', youthLeague)}
@@ -4075,7 +4064,6 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
         <div className="siehub-student-portal-head">
           <p>STUDENT PORTAL</p>
           <h2>{module?.title}学生端</h2>
-          <span>这里面向所有学生开放，用于查看部门服务说明、活动入口和后续上线的学生侧功能。</span>
         </div>
         <DepartmentHeroPortal module={module} token={token} language={language} />
         <div className="siehub-student-service-grid">
@@ -4085,7 +4073,6 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
               <span>02</span>
               <img src={sieLogo} alt="SIEVOX" />
               <strong>SIEVOX学生权益反馈系统</strong>
-              <p>学生权益反馈、诉求跟进与处理进度查询直接进入 SIEVOX 完成。</p>
               <b>立即进入 <ArrowUpRight /></b>
             </button>
           ) : isSIEBridge ? (
@@ -4101,7 +4088,6 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
               <span>02</span>
               <Trophy />
               <strong>我的绩效与评价</strong>
-              <p>查看学期成绩，在学期末完成自评、互评和职责范围内的评分。</p>
               <b>进入考核 <ArrowUpRight /></b>
             </button>
           ) : (
@@ -4112,7 +4098,6 @@ const DepartmentStudentPortal = ({ module, onOpenSIEVOX, onOpenSIEBridge, token,
               <span>05</span>
               <Trophy />
               <strong>我的绩效与评价</strong>
-              <p>查看学期成绩，在学期末完成自评、互评和职责范围内的评分。</p>
               <b>进入考核 <ArrowUpRight /></b>
             </button>
           )}
@@ -4320,34 +4305,33 @@ const DepartmentPlaceholder = ({ module, user, token, theme, onBack, onOpenSIEVO
       ) : (
         <>
           <div className="siehub-framework-grid">
-            <section><span>01</span><h2>通知管理</h2><p>发布面向学生的部门通知、活动信息和公众号文章链接，首页消息中心会自动汇总展示。</p><button type="button" disabled={!canManageNotice} onClick={() => setManageWorkspace('notice')}>{canManageNotice ? '进入编辑' : '只读说明'}</button></section>
+            <section><span>01</span><h2>通知管理</h2><button type="button" disabled={!canManageNotice} onClick={() => setManageWorkspace('notice')}>{canManageNotice ? '进入编辑' : '只读说明'}</button></section>
             {isCultureSportsArts && (
               <section>
                 <span>02</span>
                 <h2>部门介绍</h2>
-                <p>文体艺术部介绍已切换到外部展示站，站内旧编辑页已暂时隐藏。</p>
                 <button type="button" onClick={() => window.open(CULTURE_SPORTS_ARTS_INTRO_URL, '_blank', 'noopener,noreferrer')}>打开展示站</button>
               </section>
             )}
             {isSIEBridge ? (
-              <section><span>03</span><h2>SIEBridge 审核</h2><p>课程新增与资料上传申请在此集中审核，通过后展示到学生端。</p><button type="button" disabled>已接入</button></section>
+              <section><span>03</span><h2>SIEBridge 审核</h2><button type="button" disabled>已接入</button></section>
             ) : (
-              <section><span>03</span><h2>绩效考核</h2><p>学期末逐项评分、自评互评和部门标准集中在绩效工作区。</p><button type="button" onClick={() => setManageWorkspace('performance')}>进入绩效</button></section>
+              <section><span>03</span><h2>绩效考核</h2><button type="button" onClick={() => setManageWorkspace('performance')}>进入绩效</button></section>
             )}
-            <section><span>04</span><h2>成员与归档</h2><p>届次成员、身份标签、分管关系与绩效档案将归入统一组织框架。</p><button type="button" disabled>规划中</button></section>
-            <section><span>05</span><h2>部门资料库</h2><p>部门负责人、团委学生兼职团干部和分管主席层级可维护资料；志愿者可在学生端查看下载。</p><button type="button" disabled={!canViewFiles} onClick={() => setManageWorkspace('files')}>{canManageFiles ? '进入资料库' : canViewFiles ? '查看资料' : '未开放'}</button></section>
+            <section><span>04</span><h2>成员与归档</h2><button type="button" disabled>规划中</button></section>
+            <section><span>05</span><h2>部门资料库</h2><button type="button" disabled={!canViewFiles} onClick={() => setManageWorkspace('files')}>{canManageFiles ? '进入资料库' : canViewFiles ? '查看资料' : '未开放'}</button></section>
           </div>
           {isSIEBridge ? (
             <section className="siehub-bridge-card">
               <img className="siehub-bridge-logo" src={siebridgeLogo} alt="SIEBridge" />
-              <div><strong>SIEBridge 已作为独立业务页面运行</strong><span>课程检索、资料上传、提交记录和审核管理统一进入 SIEBridge 页面完成。</span></div>
+              <div><strong>课程资源共享</strong></div>
               <button className="primary-button" type="button" onClick={onOpenSIEBridge}>进入 SIEBridge <ArrowUpRight /></button>
             </section>
           ) : null}
           {!isSIEBridge && (canEnterSIEVOX ? (
-            <section className="siehub-bridge-card"><img className="siehub-bridge-logo" src={sieLogo} alt="SIEVOX" /><div><strong>学生权益部已具备独立业务平台</strong><span>SIEVOX 保持现有反馈、账号、绩效与组织管理功能，继续作为学生权益部的成熟子模块运行。</span></div><button className="primary-button" type="button" onClick={onOpenSIEVOX}>进入 SIEVOX <ArrowUpRight /></button></section>
+            <section className="siehub-bridge-card"><img className="siehub-bridge-logo" src={sieLogo} alt="SIEVOX" /><div><strong>学生权益反馈</strong></div><button className="primary-button" type="button" onClick={onOpenSIEVOX}>进入 SIEVOX <ArrowUpRight /></button></section>
           ) : (
-            <section className="siehub-bridge-card"><Scale /><div><strong>该部门暂不接入 SIEVOX</strong><span>当前仅学生权益部保留成熟的 SIEVOX 业务模块，其他部门将以框架工作台和后续专属平台的形式逐步展开。</span></div></section>
+            null
           ))}
         </>
       )) : (
@@ -4363,7 +4347,7 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
   const allowed = Boolean(user?.isUltimateAdmin);
   const [workspace, setWorkspace] = useState('organization');
 
-  return <main className="siehub-shell siehub-ultimate-window admin-demo-shell">
+  return <main className={cls('siehub-shell siehub-ultimate-window admin-demo-shell', performanceMode && 'siehub-performance-overview-window')}>
     <header className="siehub-topbar">
       <div className="siehub-brand"><span className="siehub-brand-mark"><img src={siehubLogo} alt="SIEHUB" /><i></i></span><div><strong>SIEHUB</strong><small>ORGANIZATION GOVERNANCE</small></div></div>
       <HubHeaderActions user={user}><ThemeModeButtons theme={theme} compact /><button className="icon-button theme-trigger" type="button" onClick={() => theme.setOpen(true)} title="外观设置"><Palette /></button><button className="icon-button" type="button" onClick={onOpenMy} title="账号设置"><UserRound /></button><button className="icon-button" type="button" onClick={onLogout} title="退出登录"><LogOut /></button>{languageSwitcher}</HubHeaderActions>
@@ -4374,7 +4358,6 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
         <span className="siehub-module-icon tone-gold"><ShieldCheck /></span>
         <div>
           <h1>{performanceMode ? '全部门绩效总览' : '团委学生会组织治理中枢'}</h1>
-          <span>{performanceMode ? '九个部门的日常记录、期末评价、成员成绩与归档进度。' : '统一维护届次成员、身份角色、分管部门与归档快照。'}</span>
         </div>
       </section>
       {allowed ? (
@@ -4385,7 +4368,7 @@ const UltimateOrganizationWindow = ({ user, token, theme, onBack, onOpenMy, onLo
       ) : (
         <section className="siehub-access-denied">
           <LockKeyhole />
-          <div><strong>仅终极管理员可访问</strong><span>该窗口包含团委学生会组织架构、成员身份、分管关系与届次归档能力。</span></div>
+          <div><strong>仅终极管理员可访问</strong></div>
         </section>
       )}
     </div>
@@ -4707,7 +4690,7 @@ const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, ope
             <section className="content-section"><div className="section-heading"><div><h2>从哪里开始？</h2><p>选择问题领域，我们会自动匹配负责部门。</p></div></div><CategoryGrid openCompose={openCompose} /></section>
             <section className="content-section feedback-section"><div className="section-heading"><div><h2>最近反馈</h2><p>所有进度与回复会在这里持续留痕。</p></div><button className="text-button" type="button" onClick={() => setActivePage('feedbacks')}>查看全部<ArrowRight /></button></div><div className="feedback-list">{feedbacks.slice(0, 3).map(item => <FeedbackRow key={item._id} feedback={item} onOpen={onOpenFeedback} onDelete={onDeleteFeedback} />)}</div></section>
           </div>
-          <aside className="insight-rail"><ActiveCase feedback={activeCase} onOpen={onOpenFeedback} /><section className="response-note"><MessageCircleMore /><div><strong>你的声音，会抵达。</strong><p>匿名反馈不会向处理部门展示个人身份，所有操作均保留审计记录。</p></div></section></aside>
+          <aside className="insight-rail"><ActiveCase feedback={activeCase} onOpen={onOpenFeedback} /><section className="response-note"><MessageCircleMore /><div><strong>你的声音，会抵达。</strong><p>匿名反馈不会向处理部门展示个人身份。</p></div></section></aside>
         </div>
       </div>
 
@@ -4720,12 +4703,12 @@ const StudentDesktop = ({ user, stats, feedbacks, activePage, setActivePage, ope
       </div>
 
       <div className={cls('page-panel simple-page', activePage === 'guide' && 'is-active')}>
-        <div className="page-heading"><div><p className="eyebrow">SERVICE GUIDE</p><h1>服务指南</h1><p>了解反馈受理、处理时效、材料补充与紧急联系方式，提交前可先确认事项是否适合走线上流程。</p></div></div>
+        <div className="page-heading"><div><p className="eyebrow">SERVICE GUIDE</p><h1>服务指南</h1></div></div>
         <div className="guide-grid">
           <section><Route /><h2>反馈如何流转</h2><p>提交后由学生权益部先行受理，确认问题类别、紧急程度和是否需要补充材料，再分派至对应负责人与协同部门。</p></section>
           <section><Clock3 /><h2>响应时效</h2><p>普通事项原则上 1 个工作日内首次响应；涉及跨部门核实、场地维修、制度咨询等事项，会在详情页持续同步进展。</p></section>
-          <section><PhoneCall /><h2>紧急事项</h2><p>涉及人身安全、突发疾病、火情、重大设备风险时，请优先联系学院老师、楼宇值班或校园应急渠道，线上反馈可作为后续留痕。</p></section>
-          <section><ShieldCheck /><h2>材料与隐私</h2><p>可上传图片、文档、录屏或其他佐证材料。匿名反馈不会向处理部门展示个人身份，但系统会保留必要审计记录以防恶意提交。</p></section>
+          <section><PhoneCall /><h2>紧急事项</h2><p>涉及人身安全、突发疾病、火情、重大设备风险时，请优先联系学院老师、楼宇值班或校园应急渠道。</p></section>
+          <section><ShieldCheck /><h2>材料与隐私</h2><p>可上传图片、文档、录屏或其他佐证材料。匿名反馈不会向处理部门展示个人身份。</p></section>
           <section><MessageCircleMore /><h2>补充与撤回</h2><p>事项提交后可在“我的反馈”中继续补充说明、查看回复。未进入处理流程前可撤回，已处理事项会保留归档记录。</p></section>
           <section><FileText /><h2>提交建议</h2><p>建议写清时间、地点、涉及对象、已尝试解决方式和期望结果。标题简洁、正文具体，会明显提升受理效率。</p></section>
         </div>
@@ -4764,7 +4747,7 @@ const MobileShell = ({ user, feedbacks, stats, page, setPage, openCompose, onOpe
               [Route, '反馈如何流转', '受理、分派、回复与归档', '提交后由学生权益部受理并确认问题类别，再分派至负责人或协同部门。处理进展会保留在反馈详情中。'],
               [Clock3, '处理需要多久', '普通事项 1 个工作日内响应', '普通事项原则上 1 个工作日内首次响应。跨部门核实、维修等事项可在完整对话中查看进展。'],
               [PhoneCall, '紧急情况处理', '先联系线下应急渠道', '涉及人身安全、突发疾病、火情时，请优先联系学院老师、楼宇值班或校园应急渠道。线上反馈可作为后续记录。'],
-              [ShieldCheck, '材料与隐私', '附件支持佐证，匿名保护身份', '可上传图片、文档和录屏。匿名事项不会向处理部门显示个人身份，系统保留必要审计记录。'],
+              [ShieldCheck, '材料与隐私', '附件支持佐证，匿名保护身份', '可上传图片、文档和录屏。匿名事项不会向处理部门显示个人身份。'],
               [MessageCircleMore, '补充与撤回', '在我的反馈中继续跟进', '在我的反馈打开事项，可补充信息、查看回复及撤回自己的留言。未受理的反馈可以撤销。']
             ].map(([Icon, title, subtitle, description]) => <details key={title}><summary><Icon /><span><strong>{title}</strong><small>{subtitle}</small></span><ChevronRight /></summary><p>{description}</p></details>)}</div>
           </section>

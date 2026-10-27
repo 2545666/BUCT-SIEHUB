@@ -729,7 +729,7 @@ const SIEBridgeUploadPicker = ({ files, onChange, title, maxFileSize, maxFileCou
         <Upload />
         <div>
           <strong>{files.length ? `已选择 ${files.length} 个文件` : title}</strong>
-          <p>支持上传单个文件、多个文件或整个文件夹，单个不超过 {formatFileSize(maxFileSize || 200 * 1024 * 1024)}，单次最多 {maxFileCount || 100} 个文件，文件夹内部层级会保留</p>
+          <p>支持上传单个文件、多个文件或整个文件夹，单个不超过 {formatFileSize(maxFileSize || 200 * 1024 * 1024)}，单次最多 {maxFileCount || 100} 个文件</p>
           <FileSelectionSummary files={files} />
         </div>
         <input type="file" multiple onChange={e => applySelection(e.target.files)} />
@@ -902,7 +902,7 @@ const SIEBridgeReceiptPrompt = ({ open, onClose }) => {
     <div className="siebridge-receipt-prompt">
       <dialog open>
         <header><FileText /><h3>感谢您的分享，审核通过后请领取您的上传凭证</h3></header>
-        <p>资料已进入审核队列，审核通过后会自动生成凭证并保存在 SIEBridge「我的」中。</p>
+        <p>提交成功，审核进度和凭证可在「我的」查看。</p>
         <footer>
           <button type="button" className="primary-button" onClick={onClose}>我知道了</button>
         </footer>
@@ -1425,7 +1425,7 @@ export const SIEBridgeReviewWorkspace = ({ token }) => {
     const resourceId = resource.id || resource._id;
     const fileIndex = Number.isInteger(file.index) ? file.index : 0;
     const fileName = getFilePath(file) || getFileName(file);
-    const confirmation = window.prompt(`危险操作：只删除当前文件，不会删除这条资料记录中的其他文件。\n\n请输入文件名或“确认删除”以继续：\n${fileName}`);
+    const confirmation = window.prompt(`删除此文件？请输入文件名或“确认删除”：\n${fileName}`);
     if (!confirmation) return;
     const deleteKey = `${resourceId}-${fileIndex}`;
     setDeletingFileKey(deleteKey);
