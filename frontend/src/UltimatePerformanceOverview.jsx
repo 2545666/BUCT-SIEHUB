@@ -22,7 +22,9 @@ export default function UltimatePerformanceOverview({ token, onOpenDepartment, o
     try {
       const next = await requestJson(`/ultimate/performance-overview${semester ? `?semester=${encodeURIComponent(semester)}` : ''}`, token);
       if (id !== requestId.current) return;
-      setData(next); setError('');
+      setData(next);
+      setSelected(current => next.departments?.some(item => item.department === current) ? current : (next.departments?.[0]?.department || ''));
+      setError('');
     } catch (failure) { if (id === requestId.current) setError(failure.message || '刷新失败，请重试。'); }
     finally { if (id === requestId.current) setLoading(false); }
   }, [semester, token]);
@@ -83,7 +85,7 @@ export default function UltimatePerformanceOverview({ token, onOpenDepartment, o
           {member.evaluations.map((evaluation, index) => <div className="performance-overview-evaluation" key={index}><strong>{kinds[evaluation.kind] || evaluation.kind} · {score(evaluation.score)} 分</strong>{evaluation.evaluatorName && <small>评价人：{evaluation.evaluatorName}</small>}<ul>{evaluation.items.map(item => <li key={item.key}>{item.label}：{item.score} / {item.max}</li>)}</ul>{evaluation.bonusScore > 0 && <p>额外加分 {evaluation.bonusScore} · {evaluation.bonusReason}</p>}{evaluation.comment && <p>{evaluation.comment}</p>}</div>)}
           {!member.evaluations.length && <p>暂无已提交评价。</p>}
         </details>)}
-      </section> : <p>选择部门查看明细。</p>}
+      </section> : null}
     </>}
   </section>;
 }

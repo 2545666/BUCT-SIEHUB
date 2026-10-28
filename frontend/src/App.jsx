@@ -3264,13 +3264,17 @@ const DepartmentHeroPortal = ({ module, token, language = 'zh' }) => {
 
 const HeroNewsManagement = ({ token }) => {
   const [notices, setNotices] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [message, setMessage] = useState('');
+  const [batchSaving, setBatchSaving] = useState(false);
   const departments = useMemo(() => SIEHUB_MODULES.filter(item => item.organization !== 'hub').map(item => ({ organization: item.organization, department: item.key, label: item.title })).concat([{ organization: 'student_union', department: 'default', label: '默认' }]), []);
+  const noticeId = notice => notice.id || notice._id;
   const load = useCallback(async () => {
     const res = await fetch(`${API_BASE}/hub/admin/news?limit=all`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
     if (!data.success) throw new Error(data.message || '加载新闻失败');
     setNotices(data.notices || []);
+    setSelectedIds(new Set());
   }, [token]);
   useEffect(() => { load().catch(error => setMessage(error.message)); }, [load]);
   const update = async (notice, patch) => {
@@ -3278,10 +3282,52 @@ const HeroNewsManagement = ({ token }) => {
     const res = await fetch(`${API_BASE}/hub/admin/news/${notice.id || notice._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(patch) });
     const data = await res.json();
     if (!data.success) throw new Error(data.message || '保存失败');
-    setNotices(items => items.map(item => (item.id === notice.id ? data.notice : item)));
+    setNotices(items => items.map(item => (noticeId(item) === noticeId(notice) ? data.notice : item)));
     setMessage('新闻已保存，Hero 与部门页面已同步更新');
   };
-  return <section className="siehub-hero-news-management"><div className="siehub-workspace-title"><div><p>ULTIMATE ADMIN / NEWS &amp; HERO</p><h2>Hero 页面与新闻动态管理</h2></div><button type="button" onClick={() => load().then(() => setMessage('新闻列表已刷新')).catch(error => setMessage(error.message))}>刷新</button></div>{message && <p className="siehub-form-message">{message}</p>}<div className="siehub-hero-news-table">{notices.map(notice => { const department = departments.find(item => item.organization === notice.organization && item.department === notice.department); return <article key={notice.id || notice._id}><div>{notice.coverImageUrl ? <img src={notice.coverImageUrl} alt="" /> : <span className="siehub-news-cover-fallback">SIE</span>}</div><label>标题<input value={notice.title?.zh || ''} onChange={event => setNotices(items => items.map(item => item.id === notice.id ? { ...item, title: { ...item.title, zh: event.target.value } } : item))} /></label><label>时间<input type="datetime-local" value={notice.publishedAt ? new Date(notice.publishedAt).toISOString().slice(0, 16) : ''} onChange={event => setNotices(items => items.map(item => item.id === notice.id ? { ...item, publishedAt: event.target.value } : item))} /></label><label>归属<select value={`${notice.organization}:${notice.department}`} onChange={event => { const [organization, department] = event.target.value.split(':'); setNotices(items => items.map(item => item.id === notice.id ? { ...item, organization, department } : item)); }}>{departments.map(item => <option key={`${item.organization}:${item.department}`} value={`${item.organization}:${item.department}`}>{item.label}</option>)}</select></label><label className="siehub-hero-toggle"><input type="checkbox" checked={Boolean(notice.heroEnabled)} onChange={event => setNotices(items => items.map(item => item.id === notice.id ? { ...item, heroEnabled: event.target.checked } : item))} />加入 Hero</label><button type="button" onClick={() => update(notice, { title: notice.title, publishedAt: notice.publishedAt, organization: notice.organization, department: notice.department, heroEnabled: notice.heroEnabled, heroOrder: notice.heroOrder }).catch(error => setMessage(error.message))}>保存</button></article>; })}</div></section>;
+  const setSelected = (id, checked) => setSelectedIds(current => {
+    const next = new Set(current);
+    if (checked) next.add(id); else next.delete(id);
+    return next;
+  });
+  const batchSetHero = async heroEnabled => {
+    const selected = notices.filter(notice => selectedIds.has(noticeId(notice)));
+    if (!selected.length) return;
+    setBatchSaving(true); setMessage('');
+    try {
+      await Promise.all(selected.map(async notice => {
+        const res = await fetch(`${API_BASE}/hub/admin/news/${noticeId(notice)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ heroEnabled }) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '批量保存失败');
+      }));
+      setNotices(items => items.map(item => selectedIds.has(noticeId(item)) ? { ...item, heroEnabled } : item));
+      setSelectedIds(new Set());
+      setMessage(`已将 ${selected.length} 条内容${heroEnabled ? '加入' : '移出'} Hero`);
+    } catch (error) {
+      setMessage(error.message || '批量保存失败');
+      await load().catch(() => {});
+    } finally { setBatchSaving(false); }
+  };
+  const allSelected = notices.length > 0 && selectedIds.size === notices.length;
+  return <section className="siehub-hero-news-management">
+    <div className="siehub-workspace-title"><div><p>ULTIMATE ADMIN / NEWS &amp; HERO</p><h2>Hero 页面与新闻动态管理</h2></div><button type="button" onClick={() => load().then(() => setMessage('新闻列表已刷新')).catch(error => setMessage(error.message))}>刷新</button></div>
+    <div className="siehub-hero-batch-actions">
+      <label><input type="checkbox" checked={allSelected} onChange={event => setSelectedIds(event.target.checked ? new Set(notices.map(noticeId)) : new Set())} />全选</label>
+      <span>已选 {selectedIds.size} 条</span>
+      <button type="button" disabled={!selectedIds.size || batchSaving} onClick={() => batchSetHero(true)}>批量加入 Hero</button>
+      <button type="button" disabled={!selectedIds.size || batchSaving} onClick={() => batchSetHero(false)}>批量移出 Hero</button>
+    </div>
+    {message && <p className="siehub-form-message">{message}</p>}
+    <div className="siehub-hero-news-table">{notices.map(notice => { const id = noticeId(notice); return <article key={id}>
+      <label className="siehub-news-row-select"><input type="checkbox" aria-label={`选择${notice.title?.zh || '此条内容'}`} checked={selectedIds.has(id)} onChange={event => setSelected(id, event.target.checked)} /></label>
+      <div>{notice.coverImageUrl ? <img src={notice.coverImageUrl} alt="" /> : <span className="siehub-news-cover-fallback">SIE</span>}</div>
+      <label>标题<input value={notice.title?.zh || ''} onChange={event => setNotices(items => items.map(item => noticeId(item) === id ? { ...item, title: { ...item.title, zh: event.target.value } } : item))} /></label>
+      <label>时间<input type="datetime-local" value={notice.publishedAt ? new Date(notice.publishedAt).toISOString().slice(0, 16) : ''} onChange={event => setNotices(items => items.map(item => noticeId(item) === id ? { ...item, publishedAt: event.target.value } : item))} /></label>
+      <label>归属<select value={`${notice.organization}:${notice.department}`} onChange={event => { const [organization, department] = event.target.value.split(':'); setNotices(items => items.map(item => noticeId(item) === id ? { ...item, organization, department } : item)); }}>{departments.map(item => <option key={`${item.organization}:${item.department}`} value={`${item.organization}:${item.department}`}>{item.label}</option>)}</select></label>
+      <label className="siehub-hero-toggle"><input type="checkbox" checked={Boolean(notice.heroEnabled)} onChange={event => setNotices(items => items.map(item => noticeId(item) === id ? { ...item, heroEnabled: event.target.checked } : item))} />加入 Hero</label>
+      <button type="button" onClick={() => update(notice, { title: notice.title, publishedAt: notice.publishedAt, organization: notice.organization, department: notice.department, heroEnabled: notice.heroEnabled, heroOrder: notice.heroOrder }).catch(error => setMessage(error.message))}>保存</button>
+    </article>; })}</div>
+  </section>;
 };
 
 const DepartmentNoticeWorkspace = ({ module, token, language = 'zh', onClose }) => {

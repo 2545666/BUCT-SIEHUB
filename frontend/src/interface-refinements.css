@@ -9,7 +9,8 @@ html[data-color="green"] { --theme-primary: #36762f; }
 .siehub-policy-formula { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
 .siehub-my-hero p, .siehub-my-hero span { color: #e8f0ff; }
 .siehub-my-hero h1 { color: #fff; }
-.siehub-product-windows:first-child { margin-top: 0; margin-bottom: 28px; }
+.siehub-product-windows { margin-bottom: 46px; }
+.siehub-product-windows:first-child { margin-top: 0; margin-bottom: 46px; }
 .siehub-product-window-index, .siehub-product-window-copy small { display: none; }
 .siehub-product-window { min-height: 140px; }
 .siehub-product-window-copy strong { font-size: 22px; }
@@ -24,6 +25,14 @@ html[data-color="green"] { --theme-primary: #36762f; }
 .siehub-home-performance-actions svg { width: 18px; height: 18px; }
 .siehub-home-performance-actions button:hover { filter: brightness(.92); }
 @media (max-width: 640px) { .siehub-home-performance { padding: 18px; }.siehub-home-performance h2 { font-size: 22px; }.siehub-home-performance-actions button { padding: 14px 12px; } }
+.siehub-hero-batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.siehub-hero-batch-actions label { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); font-size: 13px; }
+.siehub-hero-batch-actions input, .siehub-news-row-select input { width: 18px; height: 18px; accent-color: var(--theme-primary); }
+.siehub-hero-batch-actions span { margin-right: auto; color: var(--muted); font-size: 12px; }
+.siehub-hero-batch-actions button { min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--paper); cursor: pointer; }
+.siehub-hero-batch-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.siehub-shell .siehub-hero-news-table article { grid-template-columns: 28px 72px 1.5fr 1fr 1fr auto auto; }
+.siehub-news-row-select { display: grid !important; place-items: center; }
 .unified-performance-selectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .siehub-shell .siehub-hero-copy { position: absolute; left: clamp(18px, 2.8vw, 34px); bottom: clamp(20px, 2.8vw, 34px); width: min(360px, calc(50% - 200px)); grid-area: auto; }
 @media (max-width: 980px) {
@@ -132,12 +141,17 @@ dialog.compose-drawer::backdrop, dialog.mobile-sheet::backdrop, dialog.feedback-
   .siehub-shell .siehub-brand { flex: 0 1 auto; }
   .siehub-shell .siehub-brand strong { font-size: 18px; }
   .siehub-shell .siehub-topbar-actions .icon-button { width: 44px; height: 44px; }
-  .siehub-product-windows:first-child { margin-bottom: 22px; }
+  .siehub-product-windows, .siehub-product-windows:first-child { margin-bottom: 32px; }
   .siehub-shell .siehub-product-window { min-height: 108px; padding: 16px; gap: 12px; }
   .siehub-shell .siehub-product-window-copy strong { font-size: 20px; }
   .siehub-shell .siehub-product-window-copy em { font-size: 14px; line-height: 1.6; }
   .siehub-shell .siehub-product-window-mark { width: 44px; height: 44px; }
   .siehub-shell .siehub-product-window-action { min-height: 44px; font-size: 14px; }
+  .siehub-shell .siehub-hero-news-table article { grid-template-columns: 28px 58px minmax(0, 1fr); align-items: start; }
+  .siehub-shell .siehub-hero-news-table article > :is(label, button) { grid-column: 3; width: 100%; }
+  .siehub-shell .siehub-hero-news-table article > .siehub-news-row-select { grid-column: 1; grid-row: 1; width: auto; }
+  .siehub-shell .siehub-hero-news-table article > div { grid-column: 2; grid-row: 1; }
+  .siehub-hero-batch-actions span { order: 2; width: 100%; margin: 0; }
   .siehub-shell .siehub-department-hero { padding: 16px; gap: 12px; }
   .siehub-shell .siehub-department-hero h1 { font-size: 26px; }
   .siehub-shell .siehub-department-hero p { display: none; }
