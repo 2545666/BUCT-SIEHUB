@@ -3914,6 +3914,14 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
       <section className="siehub-hero">
         <div className="siehub-hero-meta"><span>SIEHUB</span><b>{roleScope}</b></div>
         <SIEHUBWechatNewsCarousel token={token} language={language} refreshKey={wechatNewsRefreshKey} />
+        <div className="siehub-hero-copy">
+          <div className="siehub-live-greeting">
+            <span>{clock.greeting}，{user?.name}</span>
+            <strong>{clock.timeLabel}</strong>
+            <small>{clock.dateLabel} · {clock.timezoneLabel}</small>
+            <small>{language === 'en' ? 'SIEVOX first response' : 'SIEVOX 首次响应'}：{serviceMetrics.loading && !serviceMetrics.metrics ? (language === 'en' ? 'Syncing' : '同步中') : formatAverageFirstResponse(serviceMetrics.metrics, language)}</small>
+          </div>
+        </div>
         <WechatMpHeroEntry
           token={token}
           user={user}
@@ -3924,12 +3932,6 @@ const SIEHUBHome = ({ user, token, theme, onOpenModule, onOpenDepartments, onOpe
           onCloseManualImport={closeWechatManualImport}
         />
       </section>
-      <div className="siehub-home-status">
-        <span>{clock.greeting}，{user?.name}</span>
-        <strong>{clock.timeLabel}</strong>
-        <small>{clock.dateLabel} · {clock.timezoneLabel}</small>
-        <small>{language === 'en' ? 'SIEVOX first response' : 'SIEVOX 首次响应'}：{serviceMetrics.loading && !serviceMetrics.metrics ? (language === 'en' ? 'Syncing' : '同步中') : formatAverageFirstResponse(serviceMetrics.metrics, language)}</small>
-      </div>
       <SIEHUBNoticePortal token={token} language={language} user={user} refreshKey={wechatNewsRefreshKey} />
       <section className="siehub-department-strip" aria-label="部门宣传入口">
         <div className="siehub-group-heading"><span>DEPT</span><div><p>SHOWCASE GATEWAY</p><h2>部门风采入口</h2></div><button className="siehub-section-link" type="button" onClick={onOpenDepartments}>全部部门 <ArrowRight /></button></div>

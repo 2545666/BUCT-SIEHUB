@@ -107,9 +107,6 @@
   .siehub-shell .siehub-product-window-mark { width: 30px; height: 30px; }
   .siehub-shell .siehub-product-window-copy strong { font-size: 15px; line-height: 1.4; }
   .siehub-shell .siehub-product-window-copy em, .siehub-shell .siehub-product-window-action { display: none; }
-  .siehub-shell .siehub-home-status { gap: 5px 10px; padding: 12px 0; font-size: 13px; }
-  .siehub-shell .siehub-home-status strong { font-size: 14px; }
-  .siehub-shell .siehub-home-status small { font-size: 11px; }
   .siehub-shell .siehub-school-notice-head { padding: 14px; }
   .siehub-shell .siehub-school-notice-head h2 { font-size: 17px; }
   .siehub-shell .siehub-school-notice-head p { display: none; }

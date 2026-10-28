@@ -24,9 +24,24 @@ html[data-color="green"] { --theme-primary: #36762f; }
 .siehub-home-performance-actions svg { width: 18px; height: 18px; }
 .siehub-home-performance-actions button:hover { filter: brightness(.92); }
 @media (max-width: 640px) { .siehub-home-performance { padding: 18px; }.siehub-home-performance h2 { font-size: 22px; }.siehub-home-performance-actions button { padding: 14px 12px; } }
-.siehub-home-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; padding: 16px 0; color: var(--ink); }
-.siehub-home-status small { color: var(--muted); font-size: 12px; }
 .unified-performance-selectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.siehub-shell .siehub-hero-copy { position: absolute; left: clamp(18px, 2.8vw, 34px); bottom: clamp(20px, 2.8vw, 34px); width: min(360px, calc(50% - 200px)); grid-area: auto; }
+@media (max-width: 980px) {
+  .siehub-shell .siehub-hero { min-height: 340px; }
+  .siehub-shell .siehub-hero-copy { left: 14px; right: 14px; bottom: 72px; width: auto; }
+  .siehub-shell .siehub-hero-copy > .siehub-live-greeting { position: static; width: 100%; margin: 0; padding: 0; border: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; }
+  .siehub-shell .siehub-live-greeting span { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .siehub-shell .siehub-live-greeting strong { grid-column: 2; grid-row: 1 / span 2; font-size: 22px; }
+  .siehub-shell .siehub-live-greeting small { font-size: 11px; }
+  .siehub-shell .siehub-live-greeting small:last-child { grid-column: 1 / -1; }
+  .siehub-shell .siehub-home-news-caption { inset: auto 14px 148px; max-width: calc(100% - 28px); }
+  .siehub-shell .siehub-home-news-caption strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 15px; line-height: 1.35; }
+  .siehub-shell .siehub-home-news-caption small { display: none; }
+  .siehub-shell .siehub-wechat-entry { grid-area: auto; position: absolute; inset: 42px 14px auto auto; width: min(182px, 50%); grid-template-columns: 42px minmax(0, 1fr); gap: 8px; margin: 0; padding: 8px; }
+  .siehub-shell .siehub-wechat-cover { width: 42px; aspect-ratio: 1; }
+  .siehub-shell .siehub-wechat-entry :is(span, small, .siehub-wechat-actions), .siehub-shell .siehub-wechat-cover strong { display: none; }
+  .siehub-shell .siehub-wechat-entry h2 { font-size: 12px; }
+}
 .unified-performance-selectors label { display: grid; gap: 8px; color: var(--ink); font-size: 14px; }
 .unified-performance-selectors select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); font: inherit; }
 .organization-overview { border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
