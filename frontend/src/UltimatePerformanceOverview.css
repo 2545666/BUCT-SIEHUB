@@ -1,4 +1,4 @@
-.performance-overview { color: var(--sievox-text); font-size: 15px; line-height: 1.65; padding-bottom: 28px; }
+.performance-overview { color: var(--sievox-text); font-family: var(--font-site-serif, "Noto Serif SC Variable", "Songti SC", "STSong", "SimSun", serif); font-size: 15px; font-weight: 600; line-height: 1.65; padding-bottom: 28px; }
 .performance-overview p { margin: 10px 0; overflow-wrap: anywhere; }
 .performance-overview small { display: block; font-size: 13px; }
 .performance-overview button, .performance-overview select { min-height: 44px; border: 1px solid var(--sievox-border, #cbd5e1); border-radius: 8px; padding: 9px 14px; background: var(--sievox-surface-strong); color: var(--sievox-text); font: inherit; cursor: pointer; }
@@ -8,24 +8,40 @@
 .performance-overview-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px; }
 .performance-overview-toolbar label { display: grid; gap: 6px; }
 .performance-overview-toolbar select { max-width: 100%; }
-.performance-overview-review { display: flex; align-items: center; gap: 24px; padding: 20px; background: var(--sievox-surface-strong); border-block: 1px solid var(--sievox-border, #cbd5e1); }
+.performance-overview-review { display: flex; align-items: center; gap: 24px; padding: 20px; background: linear-gradient(110deg, color-mix(in srgb, #0284c7 10%, var(--sievox-surface-strong)), var(--sievox-surface-strong)); border-block: 1px solid color-mix(in srgb, #0284c7 36%, var(--sievox-border, #cbd5e1)); }
 .performance-overview-review > div { flex: 1; }
 .performance-overview button.performance-overview-primary { background: #075985; color: #fff; border-color: #075985; flex-shrink: 0; }
 .performance-overview-status { padding-block: 12px; font-variant-numeric: tabular-nums; }
 .performance-overview-status dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 10px; }
+.performance-overview-status dl > div { padding: 12px 14px; border-left: 4px solid var(--status-accent); border-radius: 6px; background: color-mix(in srgb, var(--status-accent) 8%, var(--sievox-surface-strong)); }
+.performance-overview-status dl > div:nth-child(1) { --status-accent: #2563eb; }
+.performance-overview-status dl > div:nth-child(2) { --status-accent: #059669; }
+.performance-overview-status dl > div:nth-child(3) { --status-accent: #d97706; }
 .performance-overview-status dt { color: var(--muted); font-size: 13px; }
 .performance-overview-status dd { margin: 4px 0 0; font-size: 22px; line-height: 1.3; }
 .performance-overview-status dd small { display: inline; }
 .performance-overview-status > small { color: var(--muted); font-size: 12px; }
 .performance-overview-departments { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.performance-overview button.performance-overview-department { display: grid; grid-template-columns: 1fr; width: 100%; min-width: 0; align-content: start; align-items: start; gap: 12px; text-align: left; border: 1px solid var(--sievox-border, #cbd5e1); border-radius: 10px; padding: 16px; }
-.performance-overview-department[aria-pressed=true] { border-color: #0284c7; box-shadow: inset 0 0 0 1px #0284c7; }
-.performance-overview-progress progress { display: block; width: 100%; height: 7px; margin-top: 8px; accent-color: #0284c7; }
+.performance-overview button.performance-overview-department { --dept-accent: #2563eb; display: grid; grid-template-columns: 1fr; width: 100%; min-width: 0; align-content: start; align-items: start; gap: 12px; text-align: left; border: 1px solid color-mix(in srgb, var(--dept-accent) 32%, var(--sievox-border, #cbd5e1)); border-top: 4px solid var(--dept-accent); border-radius: 10px; padding: 14px 16px 16px; background: linear-gradient(145deg, color-mix(in srgb, var(--dept-accent) 8%, var(--sievox-surface-strong)), var(--sievox-surface-strong) 62%); }
+.performance-overview button.performance-overview-department:nth-child(2) { --dept-accent: #0891b2; }
+.performance-overview button.performance-overview-department:nth-child(3) { --dept-accent: #7c3aed; }
+.performance-overview button.performance-overview-department:nth-child(4) { --dept-accent: #db2777; }
+.performance-overview button.performance-overview-department:nth-child(5) { --dept-accent: #d97706; }
+.performance-overview button.performance-overview-department:nth-child(6) { --dept-accent: #059669; }
+.performance-overview button.performance-overview-department:nth-child(7) { --dept-accent: #ea580c; }
+.performance-overview button.performance-overview-department:nth-child(8) { --dept-accent: #4f46e5; }
+.performance-overview button.performance-overview-department:nth-child(9) { --dept-accent: #0f766e; }
+.performance-overview-department > span:first-child strong { color: var(--dept-accent); }
+.performance-overview-department[aria-pressed=true] { border-color: var(--dept-accent); box-shadow: inset 0 0 0 1px var(--dept-accent), 0 8px 20px color-mix(in srgb, var(--dept-accent) 14%, transparent); }
+.performance-overview-progress progress { appearance: none; display: block; width: 100%; height: 7px; margin-top: 8px; overflow: hidden; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--dept-accent) 14%, var(--sievox-border, #cbd5e1)); }
+.performance-overview-progress progress::-webkit-progress-bar { background: color-mix(in srgb, var(--dept-accent) 14%, var(--sievox-border, #cbd5e1)); }
+.performance-overview-progress progress::-webkit-progress-value { border-radius: 999px; background: var(--dept-accent); }
+.performance-overview-progress progress::-moz-progress-bar { border-radius: 999px; background: var(--dept-accent); }
 .performance-overview-counts { font-size: 14px; font-variant-numeric: tabular-nums; }
 .performance-overview-detail { margin-top: 36px; }
 .performance-overview-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-.performance-overview h2 { font-size: 23px; font-weight: 700; }
-.performance-overview h3 { margin: 24px 0 10px; font-size: 17px; font-weight: 700; }
+.performance-overview h2 { font-size: 23px; font-weight: 800; }
+.performance-overview h3 { margin: 24px 0 10px; font-size: 17px; font-weight: 800; }
 .performance-overview-policy { padding-block: 16px; margin-bottom: 16px; }
 .performance-overview summary { min-height: 44px; cursor: pointer; padding-block: 10px; }
 .performance-overview-member { border-top: 1px solid var(--sievox-border, #cbd5e1); padding: 10px 0; }
@@ -52,8 +68,8 @@
   .siehub-performance-overview-window .siehub-portal-switch button { font-size: 12px; min-height: 44px; padding: 8px 3px; border-radius: 6px; }
   .siehub-performance-overview-window .siehub-organization-host { margin-top: 14px; }
   .performance-overview { font-size: 14px; line-height: 1.5; }
-  .performance-overview :is(p, small, span, label, dt, dd, li) { font-weight: 400 !important; }
-  .performance-overview :is(strong, h2, h3) { font-weight: 600 !important; }
+  .performance-overview :is(p, small, span, label, dt, dd, li) { font-weight: 600 !important; }
+  .performance-overview :is(strong, h2, h3) { font-weight: 800 !important; }
   .performance-overview small { font-size: 12px; }
   .performance-overview :is(small, dt, .performance-overview-counts) { color: color-mix(in srgb, var(--ink) 76%, var(--paper)); }
   .performance-overview h2 { font-size: 17px; }
